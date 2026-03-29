@@ -53,6 +53,16 @@ class JobRunModel(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class JobPostModel(Base):
+    __tablename__ = "job_posts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    search_job_id: Mapped[str] = mapped_column(String(36), ForeignKey("search_jobs.id"), index=True)
+    job_run_id: Mapped[str] = mapped_column(String(36), ForeignKey("job_runs.id"), index=True)
+    reddit_post_id: Mapped[str] = mapped_column(String(64), ForeignKey("posts.reddit_post_id"), index=True)
+    matched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class IdempotencyRecordModel(Base):
     __tablename__ = "idempotency_records"
 
@@ -74,8 +84,12 @@ class PostModel(Base):
     subreddit: Mapped[str | None] = mapped_column(String(64), nullable=True)
     title: Mapped[str] = mapped_column(Text, default="")
     body_text: Mapped[str] = mapped_column(Text, default="")
+    author_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     score: Mapped[int] = mapped_column(Integer, default=0)
+    num_comments: Mapped[int] = mapped_column(Integer, default=0)
     created_utc: Mapped[int] = mapped_column(Integer, default=0, index=True)
+    permalink: Mapped[str | None] = mapped_column(Text, nullable=True)
+    url: Mapped[str | None] = mapped_column(Text, nullable=True)
     inserted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
@@ -84,6 +98,9 @@ class CommentModel(Base):
 
     reddit_comment_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     reddit_post_id: Mapped[str] = mapped_column(String(64), ForeignKey("posts.reddit_post_id"), index=True)
+    parent_comment_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    author_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     body_text: Mapped[str] = mapped_column(Text, default="")
     score: Mapped[int] = mapped_column(Integer, default=0)
     created_utc: Mapped[int] = mapped_column(Integer, default=0)
+    permalink: Mapped[str | None] = mapped_column(Text, nullable=True)

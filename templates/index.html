@@ -303,6 +303,7 @@
                   <div class="meta">Job: {{ job.job_id }}</div>
                   <div class="meta">Workspace: {{ job.workspace_id }}</div>
                   <div class="meta">Subreddit: {{ job.query.subreddit or "any" }}</div>
+                  <div class="meta">Posts: {{ job.latest_run.posts_found }} · Comments: {{ job.latest_run.comments_found }}</div>
                   <div class="toolbar" style="margin-top: 10px">
                     <button class="secondary inspect-job" type="button" data-job-id="{{ job.job_id }}">
                       Inspect
@@ -370,6 +371,7 @@
             <div class="meta">Job: ${job.job_id}</div>
             <div class="meta">Workspace: ${job.workspace_id}</div>
             <div class="meta">Subreddit: ${job.query.subreddit || "any"}</div>
+            <div class="meta">Posts: ${job.latest_run.posts_found || 0} · Comments: ${job.latest_run.comments_found || 0}</div>
             <div class="toolbar" style="margin-top: 10px">
               <button class="secondary inspect-job" type="button" data-job-id="${job.job_id}">Inspect</button>
               <button class="secondary refresh-job" type="button" data-job-id="${job.job_id}">Refresh Job</button>

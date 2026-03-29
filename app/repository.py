@@ -4,10 +4,18 @@ import json
 from datetime import date, datetime, timezone
 from uuid import uuid4
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import sessionmaker
 
-from app.models import CommentModel, IdempotencyRecordModel, JobRunModel, PostModel, SearchJobModel
+from app.domain.jobs import project_search_job_status
+from app.models import (
+    CommentModel,
+    IdempotencyRecordModel,
+    JobPostModel,
+    JobRunModel,
+    PostModel,
+    SearchJobModel,
+)
 
 
 def utcnow() -> datetime:
@@ -96,6 +104,28 @@ class Repository:
             )
             return session.execute(stmt).scalar_one_or_none()
 
+    def load_job_for_run(self, run_id: str) -> dict | None:
+        with self.session_factory() as session:
+            run = session.get(JobRunModel, run_id)
+            if run is None:
+                return None
+            job = session.get(SearchJobModel, run.job_id)
+            if job is None:
+                return None
+            return {
+                "run_id": run.id,
+                "job_id": job.id,
+                "workspace_id": job.workspace_id,
+                "query": job.query_text,
+                "subreddit": job.subreddit,
+                "min_score": job.min_score,
+                "date_from": job.date_from,
+                "date_to": job.date_to,
+                "limit": job.limit,
+                "include_comments": job.include_comments,
+                "enrich": job.enrich,
+            }
+
     def get_run(self, run_id: str | None) -> JobRunModel | None:
         if run_id is None:
             return None
@@ -143,6 +173,10 @@ class Repository:
                     "body_text": row.body_text,
                     "score": row.score,
                     "created_utc": row.created_utc,
+                    "author_name": row.author_name,
+                    "num_comments": row.num_comments,
+                    "permalink": row.permalink,
+                    "url": row.url,
                 }
                 for row in rows
             ],
@@ -174,12 +208,18 @@ class Repository:
             "body_text": post.body_text,
             "score": post.score,
             "created_utc": post.created_utc,
+            "author_name": post.author_name,
+            "num_comments": post.num_comments,
+            "permalink": post.permalink,
+            "url": post.url,
             "comments": [
                 {
                     "reddit_comment_id": comment.reddit_comment_id,
+                    "author_name": comment.author_name,
                     "body_text": comment.body_text,
                     "score": comment.score,
                     "created_utc": comment.created_utc,
+                    "permalink": comment.permalink,
                 }
                 for comment in comments
             ],
@@ -197,6 +237,32 @@ class Repository:
             if job is None:
                 return None
             run = session.get(JobRunModel, job.active_run_id) if job.active_run_id else None
+            items: list[dict] = []
+            total_posts = 0
+            if run is not None:
+                post_stmt = (
+                    select(PostModel)
+                    .join(JobPostModel, JobPostModel.reddit_post_id == PostModel.reddit_post_id)
+                    .where(JobPostModel.job_run_id == run.id)
+                    .order_by(JobPostModel.matched_at.desc(), PostModel.reddit_post_id.asc())
+                )
+                posts = list(session.execute(post_stmt).scalars())
+                total_posts = len(posts)
+                items = [
+                    {
+                        "reddit_post_id": post.reddit_post_id,
+                        "subreddit": post.subreddit,
+                        "title": post.title,
+                        "body_text": post.body_text,
+                        "author_name": post.author_name,
+                        "score": post.score,
+                        "num_comments": post.num_comments,
+                        "created_utc": post.created_utc,
+                        "permalink": post.permalink,
+                        "url": post.url,
+                    }
+                    for post in posts
+                ]
         latest_run_status = run.status if run is not None else "completed"
         return {
             "job_id": job.id,
@@ -225,10 +291,10 @@ class Repository:
                 "error_message": run.error_message if run else None,
             },
             "results": {
-                "total_posts": 0,
-                "returned_posts": 0,
+                "total_posts": total_posts,
+                "returned_posts": len(items),
                 "ordering": "matched_at_desc",
-                "items": [],
+                "items": items,
             },
         }
 
@@ -240,6 +306,10 @@ class Repository:
                 return None
             run.status = "running"
             run.started_at = utcnow()
+            job = session.get(SearchJobModel, run.job_id)
+            if job is not None:
+                job.status = "running"
+                job.updated_at = utcnow()
             session.commit()
             return {"run_id": run.id, "job_id": run.job_id}
 
@@ -255,8 +325,109 @@ class Repository:
             run.finished_at = now
             job = session.get(SearchJobModel, run.job_id)
             if job is not None:
-                job.status = "idle"
+                job.status = project_search_job_status(run.status, schedule_enabled=True)
                 job.updated_at = now
+            session.commit()
+
+    def mark_run_partial(
+        self,
+        run_id: str,
+        *,
+        posts_found: int,
+        comments_found: int,
+        error_code: str,
+        error_message: str,
+    ) -> None:
+        now = utcnow()
+        with self.session_factory() as session:
+            run = session.get(JobRunModel, run_id)
+            if run is None:
+                return
+            run.status = "partial"
+            run.posts_found = posts_found
+            run.comments_found = comments_found
+            run.error_code = error_code
+            run.error_message = error_message
+            run.finished_at = now
+            job = session.get(SearchJobModel, run.job_id)
+            if job is not None:
+                job.status = "partial"
+                job.updated_at = now
+            session.commit()
+
+    def mark_run_retryable_failed(self, run_id: str, *, error_code: str, error_message: str) -> None:
+        self._mark_run_failed(run_id, "retryable_failed", error_code, error_message)
+
+    def mark_run_failed(self, run_id: str, *, error_code: str, error_message: str) -> None:
+        self._mark_run_failed(run_id, "failed", error_code, error_message)
+
+    def upsert_posts(self, posts: list[dict]) -> None:
+        if not posts:
+            return
+        with self.session_factory() as session:
+            for payload in posts:
+                existing = session.get(PostModel, payload["reddit_post_id"])
+                if existing is None:
+                    session.add(
+                        PostModel(
+                            reddit_post_id=payload["reddit_post_id"],
+                            subreddit=payload.get("subreddit"),
+                            title=payload.get("title", ""),
+                            body_text=payload.get("body_text", ""),
+                            author_name=payload.get("author_name"),
+                            score=int(payload.get("score", 0)),
+                            num_comments=int(payload.get("num_comments", 0)),
+                            created_utc=int(payload.get("created_utc", 0)),
+                            permalink=payload.get("permalink"),
+                            url=payload.get("url"),
+                        )
+                    )
+                else:
+                    existing.subreddit = payload.get("subreddit")
+                    existing.title = payload.get("title", "")
+                    existing.body_text = payload.get("body_text", "")
+                    existing.author_name = payload.get("author_name")
+                    existing.score = int(payload.get("score", 0))
+                    existing.num_comments = int(payload.get("num_comments", 0))
+                    existing.created_utc = int(payload.get("created_utc", 0))
+                    existing.permalink = payload.get("permalink")
+                    existing.url = payload.get("url")
+            session.commit()
+
+    def upsert_comments(self, comments: list[dict]) -> None:
+        if not comments:
+            return
+        with self.session_factory() as session:
+            for payload in comments:
+                existing = session.get(CommentModel, payload["reddit_comment_id"])
+                if existing is None:
+                    session.add(
+                        CommentModel(
+                            reddit_comment_id=payload["reddit_comment_id"],
+                            reddit_post_id=payload["reddit_post_id"],
+                            parent_comment_id=payload.get("parent_comment_id"),
+                            author_name=payload.get("author_name"),
+                            body_text=payload.get("body_text", ""),
+                            score=int(payload.get("score", 0)),
+                            created_utc=int(payload.get("created_utc", 0)),
+                            permalink=payload.get("permalink"),
+                        )
+                    )
+                else:
+                    existing.reddit_post_id = payload["reddit_post_id"]
+                    existing.parent_comment_id = payload.get("parent_comment_id")
+                    existing.author_name = payload.get("author_name")
+                    existing.body_text = payload.get("body_text", "")
+                    existing.score = int(payload.get("score", 0))
+                    existing.created_utc = int(payload.get("created_utc", 0))
+                    existing.permalink = payload.get("permalink")
+            session.commit()
+
+    def link_job_posts(self, job_id: str, run_id: str, post_ids: list[str]) -> None:
+        with self.session_factory() as session:
+            session.execute(delete(JobPostModel).where(JobPostModel.job_run_id == run_id))
+            for post_id in post_ids:
+                session.add(JobPostModel(search_job_id=job_id, job_run_id=run_id, reddit_post_id=post_id))
             session.commit()
 
     def list_recent_jobs(self, workspace_id: str, limit: int = 20) -> list[dict]:
@@ -289,6 +460,8 @@ class Repository:
                         "latest_run": {
                             "run_id": run.id if run else None,
                             "status": run.status if run else "completed",
+                            "posts_found": run.posts_found if run else 0,
+                            "comments_found": run.comments_found if run else 0,
                         },
                     }
                 )
@@ -299,3 +472,19 @@ class Repository:
         if value is None:
             return None
         return date.fromisoformat(value)
+
+    def _mark_run_failed(self, run_id: str, status: str, error_code: str, error_message: str) -> None:
+        now = utcnow()
+        with self.session_factory() as session:
+            run = session.get(JobRunModel, run_id)
+            if run is None:
+                return
+            run.status = status
+            run.error_code = error_code
+            run.error_message = error_message
+            run.finished_at = now
+            job = session.get(SearchJobModel, run.job_id)
+            if job is not None:
+                job.status = "error"
+                job.updated_at = now
+            session.commit()

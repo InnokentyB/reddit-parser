@@ -22,11 +22,15 @@ def create_app():
 
 
 @pytest.fixture
-def client(create_app):
+def app(create_app):
     try:
-        app = create_app(testing=True)
+        return create_app(testing=True)
     except TypeError:
-        app = create_app()
+        return create_app()
+
+
+@pytest.fixture
+def client(app):
     return TestClient(app)
 
 
@@ -58,3 +62,8 @@ def classify_run_outcome():
 @pytest.fixture
 def select_api_comments():
     return load_symbol("app.domain.comments", "select_api_comments")
+
+
+@pytest.fixture
+def create_reddit_client():
+    return load_symbol("app.providers.reddit", "RedditOAuthClient")
