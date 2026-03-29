@@ -8,4 +8,7 @@ DEFAULT_DB_FILENAME = "reddit_insight_collector.db"
 
 
 def default_database_url() -> str:
-    return os.getenv("APP_DATABASE_URL", f"sqlite+pysqlite:///{Path.cwd() / DEFAULT_DB_FILENAME}")
+    return os.getenv(
+        "APP_DATABASE_URL",
+        "postgresql+psycopg2://postgres:postgres@127.0.0.1:5432/reddit_insight_collector",
+    )

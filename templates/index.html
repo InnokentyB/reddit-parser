@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Reddit Insight Collector</title>
+    <style>
+      :root {
+        --bg: #f5efe3;
+        --panel: #fffdf8;
+        --ink: #1e293b;
+        --muted: #64748b;
+        --accent: #bb3e03;
+        --accent-soft: #ffe8d6;
+        --line: #e2d5c1;
+        --ok: #1d6b57;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, rgba(187, 62, 3, 0.10), transparent 26%),
+          radial-gradient(circle at bottom right, rgba(29, 107, 87, 0.10), transparent 22%),
+          linear-gradient(180deg, #fffaf0 0%, var(--bg) 100%);
+      }
+
+      .shell {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 32px 20px 56px;
+      }
+
+      .hero {
+        display: grid;
+        gap: 20px;
+        margin-bottom: 28px;
+      }
+
+      .eyebrow {
+        color: var(--accent);
+        text-transform: uppercase;
+        letter-spacing: 0.15em;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(2.2rem, 4vw, 4.3rem);
+        line-height: 0.95;
+      }
+
+      .lede {
+        max-width: 760px;
+        color: var(--muted);
+        font-size: 1.05rem;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: minmax(320px, 420px) 1fr;
+        gap: 20px;
+      }
+
+      .panel {
+        background: color-mix(in srgb, var(--panel) 90%, white);
+        border: 1px solid var(--line);
+        border-radius: 24px;
+        padding: 22px;
+        box-shadow: 0 18px 40px rgba(71, 85, 105, 0.08);
+      }
+
+      .panel h2 {
+        margin: 0 0 14px;
+        font-size: 1.15rem;
+      }
+
+      .stack {
+        display: grid;
+        gap: 12px;
+      }
+
+      label {
+        display: grid;
+        gap: 6px;
+        font-size: 0.95rem;
+      }
+
+      input,
+      select {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 12px 14px;
+        font-size: 0.98rem;
+        background: white;
+      }
+
+      .inline {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+
+      .toggle-row {
+        display: flex;
+        gap: 16px;
+        flex-wrap: wrap;
+        font-size: 0.92rem;
+      }
+
+      .toggle-row label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      button {
+        border: none;
+        border-radius: 999px;
+        padding: 12px 18px;
+        font-size: 0.98rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition: transform 0.15s ease, opacity 0.15s ease;
+      }
+
+      button:hover {
+        transform: translateY(-1px);
+      }
+
+      button.primary {
+        background: var(--accent);
+        color: white;
+      }
+
+      button.secondary {
+        background: var(--accent-soft);
+        color: var(--accent);
+      }
+
+      .toolbar {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .meta {
+        color: var(--muted);
+        font-size: 0.92rem;
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: var(--accent-soft);
+        color: var(--accent);
+        font-size: 0.82rem;
+        font-weight: 700;
+      }
+
+      .jobs {
+        display: grid;
+        gap: 12px;
+      }
+
+      .job-card {
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        padding: 14px;
+        background: rgba(255, 255, 255, 0.7);
+      }
+
+      .job-card h3 {
+        margin: 0 0 6px;
+        font-size: 1rem;
+      }
+
+      .job-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-bottom: 8px;
+      }
+
+      .status-ok {
+        color: var(--ok);
+      }
+
+      pre {
+        margin: 0;
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-size: 0.87rem;
+        line-height: 1.45;
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 14px;
+        max-height: 440px;
+        overflow: auto;
+      }
+
+      .empty {
+        color: var(--muted);
+        font-style: italic;
+      }
+
+      @media (max-width: 920px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <section class="hero">
+        <div class="eyebrow">MVP Control Room</div>
+        <h1>Reddit Insight Collector</h1>
+        <div class="lede">
+          Create search jobs, inspect queue state, and refresh saved searches without juggling curl commands.
+          This UI talks directly to the same FastAPI endpoints you deploy.
+        </div>
+      </section>
+
+      <section class="grid">
+        <div class="panel">
+          <h2>Create Search Job</h2>
+          <form id="search-form" class="stack">
+            <label>
+              Workspace
+              <input id="workspace_id" name="workspace_id" value="{{ workspace_id }}" required />
+            </label>
+            <label>
+              Query
+              <input id="query" name="query" value="AI product manager" maxlength="200" required />
+            </label>
+            <label>
+              Subreddit
+              <input id="subreddit" name="subreddit" value="productmanagement" />
+            </label>
+            <div class="inline">
+              <label>
+                Limit
+                <input id="limit" name="limit" type="number" min="1" max="100" value="25" />
+              </label>
+              <label>
+                Min score
+                <input id="min_score" name="min_score" type="number" min="0" max="100000" value="5" />
+              </label>
+            </div>
+            <div class="inline">
+              <label>
+                Date from
+                <input id="date_from" name="date_from" type="date" value="2025-01-01" />
+              </label>
+              <label>
+                Date to
+                <input id="date_to" name="date_to" type="date" value="2025-03-01" />
+              </label>
+            </div>
+            <div class="toggle-row">
+              <label><input id="include_comments" type="checkbox" checked /> Include comments</label>
+              <label><input id="enrich" type="checkbox" checked /> Enrich</label>
+            </div>
+            <div class="toolbar">
+              <button class="primary" type="submit">Queue Search</button>
+              <button class="secondary" type="button" id="refresh-jobs">Refresh Jobs</button>
+            </div>
+          </form>
+          <div style="height: 16px"></div>
+          <div class="meta">Last action</div>
+          <pre id="search-result" class="empty">No actions yet.</pre>
+        </div>
+
+        <div class="panel">
+          <div class="job-row">
+            <div>
+              <h2>Recent Jobs</h2>
+              <div class="meta">Newest first, straight from the API backing store.</div>
+            </div>
+            <span class="badge" id="jobs-count">{{ jobs|length }} jobs</span>
+          </div>
+          <div id="jobs" class="jobs">
+            {% if jobs %}
+              {% for job in jobs %}
+                <article class="job-card" data-job-id="{{ job.job_id }}">
+                  <div class="job-row">
+                    <h3>{{ job.query.query_text }}</h3>
+                    <span class="badge">{{ job.latest_run.status }}</span>
+                  </div>
+                  <div class="meta">Job: {{ job.job_id }}</div>
+                  <div class="meta">Workspace: {{ job.workspace_id }}</div>
+                  <div class="meta">Subreddit: {{ job.query.subreddit or "any" }}</div>
+                  <div class="toolbar" style="margin-top: 10px">
+                    <button class="secondary inspect-job" type="button" data-job-id="{{ job.job_id }}">
+                      Inspect
+                    </button>
+                    <button class="secondary refresh-job" type="button" data-job-id="{{ job.job_id }}">
+                      Refresh Job
+                    </button>
+                  </div>
+                </article>
+              {% endfor %}
+            {% else %}
+              <div class="empty">No jobs yet. Create one from the form.</div>
+            {% endif %}
+          </div>
+          <div style="height: 16px"></div>
+          <div class="meta">Inspection output</div>
+          <pre id="job-detail" class="empty">Select a job to inspect its latest API response.</pre>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      const form = document.getElementById("search-form");
+      const jobsRoot = document.getElementById("jobs");
+      const jobsCount = document.getElementById("jobs-count");
+      const searchResult = document.getElementById("search-result");
+      const jobDetail = document.getElementById("job-detail");
+      const refreshJobsButton = document.getElementById("refresh-jobs");
+
+      function uuid() {
+        if (window.crypto && window.crypto.randomUUID) {
+          return window.crypto.randomUUID();
+        }
+        return String(Date.now()) + "-" + Math.random().toString(16).slice(2);
+      }
+
+      function setOutput(node, value) {
+        node.classList.remove("empty");
+        node.textContent = JSON.stringify(value, null, 2);
+      }
+
+      async function fetchJson(url, options = {}) {
+        const response = await fetch(url, options);
+        const data = await response.json();
+        if (!response.ok) {
+          throw data;
+        }
+        return data;
+      }
+
+      async function loadJobs() {
+        const workspaceId = document.getElementById("workspace_id").value || "{{ workspace_id }}";
+        const data = await fetchJson(`/ui/jobs?workspace_id=${encodeURIComponent(workspaceId)}`);
+        jobsCount.textContent = `${data.jobs.length} jobs`;
+        if (!data.jobs.length) {
+          jobsRoot.innerHTML = '<div class="empty">No jobs yet. Create one from the form.</div>';
+          return;
+        }
+        jobsRoot.innerHTML = data.jobs.map((job) => `
+          <article class="job-card" data-job-id="${job.job_id}">
+            <div class="job-row">
+              <h3>${job.query.query_text}</h3>
+              <span class="badge">${job.latest_run.status}</span>
+            </div>
+            <div class="meta">Job: ${job.job_id}</div>
+            <div class="meta">Workspace: ${job.workspace_id}</div>
+            <div class="meta">Subreddit: ${job.query.subreddit || "any"}</div>
+            <div class="toolbar" style="margin-top: 10px">
+              <button class="secondary inspect-job" type="button" data-job-id="${job.job_id}">Inspect</button>
+              <button class="secondary refresh-job" type="button" data-job-id="${job.job_id}">Refresh Job</button>
+            </div>
+          </article>
+        `).join("");
+      }
+
+      async function inspectJob(jobId) {
+        const workspaceId = document.getElementById("workspace_id").value || "{{ workspace_id }}";
+        try {
+          const data = await fetchJson(`/search/${jobId}`, {
+            headers: {"X-Workspace-Id": workspaceId}
+          });
+          setOutput(jobDetail, data);
+        } catch (error) {
+          setOutput(jobDetail, error);
+        }
+      }
+
+      async function refreshJob(jobId) {
+        const workspaceId = document.getElementById("workspace_id").value || "{{ workspace_id }}";
+        try {
+          const data = await fetchJson(`/refresh/${jobId}`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Workspace-Id": workspaceId
+            },
+            body: JSON.stringify({idempotency_key: uuid()})
+          });
+          setOutput(searchResult, data);
+          await loadJobs();
+          await inspectJob(jobId);
+        } catch (error) {
+          setOutput(searchResult, error);
+        }
+      }
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const workspaceId = document.getElementById("workspace_id").value;
+        const payload = {
+          query: document.getElementById("query").value,
+          subreddit: document.getElementById("subreddit").value || null,
+          limit: Number(document.getElementById("limit").value),
+          min_score: Number(document.getElementById("min_score").value),
+          date_from: document.getElementById("date_from").value || null,
+          date_to: document.getElementById("date_to").value || null,
+          include_comments: document.getElementById("include_comments").checked,
+          enrich: document.getElementById("enrich").checked,
+          idempotency_key: uuid()
+        };
+
+        try {
+          const data = await fetchJson("/search", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Workspace-Id": workspaceId
+            },
+            body: JSON.stringify(payload)
+          });
+          setOutput(searchResult, data);
+          await loadJobs();
+          await inspectJob(data.job_id);
+        } catch (error) {
+          setOutput(searchResult, error);
+        }
+      });
+
+      refreshJobsButton.addEventListener("click", () => {
+        loadJobs().catch((error) => setOutput(searchResult, error));
+      });
+
+      jobsRoot.addEventListener("click", (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) {
+          return;
+        }
+        const jobId = target.dataset.jobId;
+        if (!jobId) {
+          return;
+        }
+        if (target.classList.contains("inspect-job")) {
+          inspectJob(jobId).catch((error) => setOutput(jobDetail, error));
+        }
+        if (target.classList.contains("refresh-job")) {
+          refreshJob(jobId);
+        }
+      });
+    </script>
+  </body>
+</html>

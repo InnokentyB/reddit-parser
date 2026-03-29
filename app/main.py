@@ -5,8 +5,9 @@ from datetime import date
 from typing import Any
 from uuid import uuid4
 
-from fastapi import FastAPI, Header, Request
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, Header, Query, Request
+from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.templating import Jinja2Templates
 
 from app.config import default_database_url
 from app.db import Base, create_engine_and_sessionmaker
@@ -17,6 +18,7 @@ from app.validation import validate_posts_query, validate_refresh_payload, valid
 
 
 IDEMPOTENCY_RETENTION_HOURS = 24
+templates = Jinja2Templates(directory="templates")
 
 
 def get_workspace_id(request: Request, x_workspace_id: str | None) -> str:
@@ -67,6 +69,32 @@ def create_app(testing: bool = False) -> FastAPI:
             details=exc.details,
             retryable=exc.retryable,
         )
+
+    @app.get("/health")
+    async def health():
+        return {"status": "ok"}
+
+    @app.get("/", response_class=HTMLResponse)
+    async def home(
+        request: Request,
+        workspace_id: str = Query("test-workspace"),
+    ):
+        jobs = app.state.repository.list_recent_jobs(workspace_id=workspace_id, limit=20)
+        return templates.TemplateResponse(
+            request=request,
+            name="index.html",
+            context={
+                "workspace_id": workspace_id,
+                "jobs": jobs,
+            },
+        )
+
+    @app.get("/ui/jobs")
+    async def ui_jobs(
+        workspace_id: str = Query(...),
+    ):
+        jobs = app.state.repository.list_recent_jobs(workspace_id=workspace_id, limit=20)
+        return {"jobs": jobs}
 
     @app.get("/posts")
     async def list_posts(

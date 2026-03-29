@@ -1,15 +1,30 @@
 # Reddit Insight Collector (MVP)
 
-Minimal FastAPI + SQLite + worker scaffold for collecting and processing Reddit insight jobs.
+Minimal FastAPI + Postgres + worker scaffold for collecting and processing Reddit insight jobs, with a simple built-in UI.
 
 ## What is included
 
 - FastAPI API with request validation and stable error envelopes
-- SQLite persistence through SQLAlchemy
+- Postgres persistence through SQLAlchemy
 - background worker process that consumes queued job runs
+- simple browser UI for creating and inspecting jobs
 - pytest test suite for API contracts and domain rules
 
 ## Local run
+
+### Docker-first local setup
+
+Start Postgres, API, and worker together:
+
+```bash
+docker compose up --build
+```
+
+Then open:
+
+```text
+http://127.0.0.1:8000
+```
 
 ### 1. Start the API
 
@@ -30,6 +45,16 @@ Single-cycle mode:
 ```bash
 python3 -m app.worker --once
 ```
+
+### 3. Postgres connection for local non-Docker runs
+
+By default, the app now expects:
+
+```bash
+export APP_DATABASE_URL=postgresql+psycopg2://postgres:postgres@127.0.0.1:5432/reddit_insight_collector
+```
+
+If you want to point to Render later, use its Postgres connection string in `APP_DATABASE_URL`.
 
 ## Tests
 
@@ -65,6 +90,14 @@ curl -H 'X-Workspace-Id: test-workspace' \
   'http://127.0.0.1:8000/search/<job_id>'
 ```
 
+### UI
+
+Open:
+
+```text
+http://127.0.0.1:8000/?workspace_id=test-workspace
+```
+
 ### List stored posts
 
 ```bash
@@ -74,6 +107,7 @@ curl -H 'X-Workspace-Id: test-workspace' \
 
 ## Notes
 
-- Default database file: `reddit_insight_collector.db` in the project root
+- Default runtime database: local Postgres on `127.0.0.1:5432`
 - Tests use an isolated in-memory SQLite database
 - The current worker is intentionally minimal: it moves queued runs to `completed` without external Reddit ingestion yet
+- `docker-compose.yml` is intended for local development; Render should provide `APP_DATABASE_URL` from its managed Postgres instance

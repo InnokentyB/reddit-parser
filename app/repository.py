@@ -5,7 +5,7 @@ from datetime import date, datetime, timezone
 from uuid import uuid4
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import sessionmaker
 
 from app.models import CommentModel, IdempotencyRecordModel, JobRunModel, PostModel, SearchJobModel
 
@@ -258,6 +258,41 @@ class Repository:
                 job.status = "idle"
                 job.updated_at = now
             session.commit()
+
+    def list_recent_jobs(self, workspace_id: str, limit: int = 20) -> list[dict]:
+        with self.session_factory() as session:
+            stmt = (
+                select(SearchJobModel)
+                .where(SearchJobModel.workspace_id == workspace_id)
+                .order_by(SearchJobModel.created_at.desc(), SearchJobModel.id.asc())
+                .limit(limit)
+            )
+            jobs = list(session.execute(stmt).scalars())
+            results: list[dict] = []
+            for job in jobs:
+                run = session.get(JobRunModel, job.active_run_id) if job.active_run_id else None
+                results.append(
+                    {
+                        "job_id": job.id,
+                        "workspace_id": job.workspace_id,
+                        "status": job.status,
+                        "query": {
+                            "query_text": job.query_text,
+                            "subreddit": job.subreddit,
+                            "min_score": job.min_score,
+                            "date_from": job.date_from.isoformat() if job.date_from else None,
+                            "date_to": job.date_to.isoformat() if job.date_to else None,
+                            "limit": job.limit,
+                            "include_comments": job.include_comments,
+                            "enrich": job.enrich,
+                        },
+                        "latest_run": {
+                            "run_id": run.id if run else None,
+                            "status": run.status if run else "completed",
+                        },
+                    }
+                )
+            return results
 
     @staticmethod
     def _parse_optional_date(value: str | None) -> date | None:
