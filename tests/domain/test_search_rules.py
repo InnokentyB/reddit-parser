@@ -44,9 +44,47 @@ def test_build_query_hash_stays_stable_for_equivalent_normalized_inputs(
     first = build_query_hash(valid_search_payload)
 
     equivalent = dict(valid_search_payload)
-    equivalent["query"] = "  ai   product manager  "
-    equivalent["subreddit"] = "r/ProductManagement"
+    equivalent["query"] = "  ai   course authoring tools  "
+    equivalent["subreddit"] = "r/InstructionalDesign"
 
     second = build_query_hash(equivalent)
+
+    assert first == second
+
+
+def test_build_query_hash_stays_stable_for_equivalent_query_definition_inputs(build_query_hash):
+    first = build_query_hash(
+        {
+            "query_mode": "query_definition",
+            "query_definition_id": "q-tooling-001",
+            "query_cluster": "tooling_ask",
+            "query_priority": 1,
+            "query": '  title:"adaptive learning"   OR selftext:"adaptive learning" ',
+            "subreddits": ["InstructionalDesign", "r/EdTech"],
+            "match_must_include_any": ["Adaptive", "Branching"],
+            "exclude_if_contains": ["Hiring"],
+            "min_score": 5,
+            "limit": 50,
+            "include_comments": True,
+            "enrich": True,
+        }
+    )
+
+    second = build_query_hash(
+        {
+            "query_mode": "query_definition",
+            "query_definition_id": "q-tooling-001",
+            "query_cluster": "tooling_ask",
+            "query_priority": 1,
+            "query": 'title:"adaptive learning" OR selftext:"adaptive learning"',
+            "subreddits": ["r/instructionaldesign", "edtech"],
+            "match_must_include_any": ["adaptive", "branching"],
+            "exclude_if_contains": ["hiring"],
+            "min_score": 5,
+            "limit": 50,
+            "include_comments": True,
+            "enrich": True,
+        }
+    )
 
     assert first == second

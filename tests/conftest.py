@@ -3,7 +3,12 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 import pytest
 
-from tests.support import build_valid_search_payload, load_symbol
+from tests.support import (
+    build_query_bank_yaml,
+    build_structured_search_payload,
+    build_valid_search_payload,
+    load_symbol,
+)
 
 
 @pytest.fixture
@@ -14,6 +19,16 @@ def workspace_headers() -> dict[str, str]:
 @pytest.fixture
 def valid_search_payload() -> dict[str, object]:
     return build_valid_search_payload()
+
+
+@pytest.fixture
+def structured_search_payload() -> dict[str, object]:
+    return build_structured_search_payload()
+
+
+@pytest.fixture
+def query_bank_yaml() -> str:
+    return build_query_bank_yaml()
 
 
 @pytest.fixture

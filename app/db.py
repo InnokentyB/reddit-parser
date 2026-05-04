@@ -26,7 +26,6 @@ def create_engine_and_sessionmaker(
         engine = create_engine(
             database_url,
             future=True,
-            connect_args={"check_same_thread": False},
         )
 
     session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)

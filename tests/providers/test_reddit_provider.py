@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import httpx
 import pytest
 
@@ -46,10 +48,17 @@ def test_reddit_client_normalizes_search_posts(create_reddit_client):
                                     "selftext": "Body",
                                     "author": "alice",
                                     "score": 42,
+                                    "upvote_ratio": 0.88,
                                     "num_comments": 7,
+                                    "is_self": True,
+                                    "locked": False,
+                                    "archived": False,
+                                    "stickied": False,
+                                    "link_flair_text": "Discussion",
                                     "created_utc": 1735689600,
                                     "permalink": "/r/programming/comments/abc123/cursor_review/",
                                     "url": "https://reddit.com/r/programming/comments/abc123/cursor_review/",
+                                    "thumbnail": "https://example.com/thumb.jpg",
                                 }
                             }
                         ]
@@ -77,17 +86,48 @@ def test_reddit_client_normalizes_search_posts(create_reddit_client):
     assert posts == [
         {
             "reddit_post_id": "abc123",
+            "post_id": "abc123",
+            "platform": "reddit",
+            "post_url": "https://www.reddit.com/r/programming/comments/abc123/cursor_review/",
             "subreddit": "programming",
             "title": "Cursor review",
             "body_text": "Body",
+            "body_has_link": False,
             "author_name": "alice",
+            "author_username": "alice",
+            "post_created_utc": 1735689600,
+            "fetched_at_utc": posts[0]["fetched_at_utc"],
             "score": 42,
+            "upvote_ratio": 0.88,
             "num_comments": 7,
+            "is_self_post": True,
+            "is_locked": False,
+            "is_archived": False,
+            "is_removed": False,
+            "is_stickied": False,
+            "flair_text": "Discussion",
+            "matched_query_id": None,
+            "contract_version": "1.0",
+            "author_account_age_days": None,
+            "author_total_karma": None,
+            "author_subreddit_karma": None,
+            "op_replied_in_thread": False,
+            "op_reply_count": 0,
+            "tools_mentioned_in_thread_json": None,
+            "competitor_mentioned_in_thread": False,
+            "previous_seturon_mention_in_thread": False,
+            "subreddit_subscribers_count": None,
+            "subreddit_active_users_count": None,
+            "subreddit_rules_snapshot_url": None,
+            "post_thumbnail_url": "https://example.com/thumb.jpg",
+            "post_external_link_url": None,
+            "post_external_link_domain": None,
             "created_utc": 1735689600,
             "permalink": "/r/programming/comments/abc123/cursor_review/",
             "url": "https://reddit.com/r/programming/comments/abc123/cursor_review/",
         }
     ]
+    assert abs(posts[0]["fetched_at_utc"] - int(datetime.now(timezone.utc).timestamp())) < 10
 
 
 def test_reddit_client_normalizes_top_comments(create_reddit_client):
@@ -165,6 +205,64 @@ def test_reddit_client_normalizes_top_comments(create_reddit_client):
             "permalink": "/r/programming/comments/abc123/_/c2/",
         },
     ]
+
+
+def test_reddit_client_fetches_author_profile(create_reddit_client):
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "www.reddit.com":
+            return httpx.Response(200, json={"access_token": "token-123", "expires_in": 3600})
+        if request.url.path == "/user/alice/about.json":
+            return httpx.Response(
+                200,
+                json={
+                    "data": {
+                        "created_utc": 1704067200,
+                        "total_karma": 1234,
+                    }
+                },
+            )
+        raise AssertionError(f"Unexpected request: {request.method} {request.url}")
+
+    client = create_reddit_client(
+        client_id="id",
+        client_secret="secret",
+        user_agent="agent",
+        transport=httpx.MockTransport(handler),
+    )
+
+    profile = client.fetch_author_profile("alice", "programming")
+
+    assert profile["author_total_karma"] == 1234
+    assert profile["author_subreddit_karma"] is None
+    assert profile["author_account_age_days"] is not None
+
+
+def test_reddit_client_fetches_subreddit_snapshot(create_reddit_client):
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "www.reddit.com":
+            return httpx.Response(200, json={"access_token": "token-123", "expires_in": 3600})
+        if request.url.path == "/r/programming/about.json":
+            return httpx.Response(200, json={"data": {"subscribers": 5000000, "active_user_count": 12000}})
+        if request.url.path == "/r/programming/about/rules.json":
+            return httpx.Response(200, json={"rules": [{"short_name": "No spam"}]})
+        raise AssertionError(f"Unexpected request: {request.method} {request.url}")
+
+    client = create_reddit_client(
+        client_id="id",
+        client_secret="secret",
+        user_agent="agent",
+        transport=httpx.MockTransport(handler),
+    )
+
+    snapshot = client.fetch_subreddit_snapshot("programming")
+
+    assert snapshot == {
+        "subreddit": "programming",
+        "subscribers_count": 5000000,
+        "active_users_count": 12000,
+        "rules_snapshot_url": "https://www.reddit.com/r/programming/about/rules",
+        "rules_json": '[{"short_name": "No spam"}]',
+    }
 
 
 def test_reddit_client_retries_on_429(create_reddit_client, monkeypatch):

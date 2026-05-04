@@ -16,6 +16,21 @@ def test_post_search_returns_202_for_valid_request(client, workspace_headers, va
     assert UUID(body["run_id"])
 
 
+def test_post_search_accepts_structured_query_definition_payload(
+    client, workspace_headers, structured_search_payload
+):
+    response = client.post("/search", json=structured_search_payload, headers=workspace_headers)
+
+    assert response.status_code == 202
+    body = response.json()
+    search_view = client.get(f"/search/{body['job_id']}", headers=workspace_headers).json()
+    assert search_view["query"]["query_definition_id"] == "q-tooling-001"
+    assert search_view["query"]["cluster"] == "tooling_ask"
+    assert search_view["query"]["priority"] == 1
+    assert search_view["query"]["subreddits"] == ["instructionaldesign", "edtech"]
+    assert search_view["query"]["match_must_include_any"] == ["adaptive", "branching"]
+
+
 def test_post_search_rejects_missing_query(client, workspace_headers, valid_search_payload):
     payload = copy.deepcopy(valid_search_payload)
     payload.pop("query")
@@ -82,6 +97,16 @@ def test_post_search_rejects_same_idempotency_key_for_different_payload(
     assert body["error"]["retryable"] is False
 
 
+def test_post_search_rejects_subreddit_outside_allowlist(client, workspace_headers, valid_search_payload):
+    payload = copy.deepcopy(valid_search_payload)
+    payload["subreddit"] = "productmanagement"
+
+    response = client.post("/search", json=payload, headers=workspace_headers)
+
+    assert response.status_code == 400
+    assert any(detail["field"] == "subreddit" for detail in response.json()["error"]["details"])
+
+
 def test_get_search_unknown_or_unauthorized_job_returns_404(client, workspace_headers):
     response = client.get(
         "/search/00000000-0000-0000-0000-000000000000", headers=workspace_headers
@@ -116,3 +141,83 @@ def test_post_refresh_returns_existing_active_run_on_overlap(
     assert first.status_code == 202
     assert second.status_code == 202
     assert second.json() == first.json()
+
+
+def test_import_search_templates_from_yaml_and_list_them(client, workspace_headers, query_bank_yaml):
+    response = client.post(
+        "/search-templates/import",
+        json={
+            "yaml_content": query_bank_yaml,
+            "schedule_daily": True,
+            "limit": 50,
+            "min_score": 5,
+            "include_comments": True,
+            "enrich": True,
+            "idempotency_key": "44444444-4444-4444-4444-444444444444",
+        },
+        headers=workspace_headers,
+    )
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["imported_templates"] == 2
+    assert body["templates"][0]["schedule_enabled"] is True
+    assert body["templates"][0]["schedule_interval_hours"] == 24
+
+    listed = client.get("/search-templates", headers=workspace_headers)
+    assert listed.status_code == 200
+    templates = listed.json()["templates"]
+    assert len(templates) == 2
+    assert templates[0]["query_payload"]["query_mode"] == "query_definition"
+
+
+def test_run_search_template_now_queues_refresh(client, workspace_headers, query_bank_yaml):
+    imported = client.post(
+        "/search-templates/import",
+        json={
+            "yaml_content": query_bank_yaml,
+            "schedule_daily": True,
+            "limit": 50,
+            "min_score": 5,
+            "include_comments": True,
+            "enrich": True,
+            "idempotency_key": "55555555-5555-5555-5555-555555555555",
+        },
+        headers=workspace_headers,
+    ).json()
+    template_id = imported["templates"][0]["template_id"]
+
+    response = client.post(
+        f"/search-templates/{template_id}/run",
+        json={"idempotency_key": "66666666-6666-6666-6666-666666666666"},
+        headers=workspace_headers,
+    )
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["template_id"] == template_id
+    assert body["status"] == "queued"
+
+
+def test_home_page_renders_template_import_and_saved_templates_sections(
+    client, workspace_headers, query_bank_yaml
+):
+    client.post(
+        "/search-templates/import",
+        json={
+            "yaml_content": query_bank_yaml,
+            "schedule_daily": True,
+            "limit": 50,
+            "min_score": 5,
+            "include_comments": True,
+            "enrich": True,
+            "idempotency_key": "88888888-8888-8888-8888-888888888888",
+        },
+        headers=workspace_headers,
+    )
+
+    response = client.get("/?workspace_id=test-workspace")
+
+    assert response.status_code == 200
+    assert "Import Query Bank" in response.text
+    assert "Saved Templates" in response.text
