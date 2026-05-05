@@ -15,6 +15,25 @@ from app.domain.search import build_query_hash
 from app.errors import AppError, create_error_response
 from app.query_bank import parse_query_bank_yaml
 from app.repository import Repository
+from app.schemas import (
+    ErrorResponse,
+    HealthResponse,
+    InsightsResponse,
+    PostDetailResponse,
+    PostsListResponse,
+    QueueResponse,
+    RefreshRequest,
+    SearchRequest,
+    SearchViewResponse,
+    SummaryResponse,
+    TemplateImportRequest,
+    TemplateImportResponse,
+    TemplateResponse as SearchTemplateResponse,
+    TemplateRunResponse,
+    TemplatesListResponse,
+    UiJobsResponse,
+    UiTemplatesResponse,
+)
 from app.validation import (
     validate_posts_query,
     validate_refresh_payload,
@@ -25,6 +44,13 @@ from app.validation import (
 
 IDEMPOTENCY_RETENTION_HOURS = 24
 templates = Jinja2Templates(directory="templates")
+STANDARD_ERROR_RESPONSES = {
+    400: {"model": ErrorResponse, "description": "Validation error"},
+    404: {"model": ErrorResponse, "description": "Resource not found"},
+    409: {"model": ErrorResponse, "description": "Idempotency or state conflict"},
+    429: {"model": ErrorResponse, "description": "Rate limited"},
+    503: {"model": ErrorResponse, "description": "Dependency or capacity issue"},
+}
 
 
 def get_workspace_id(request: Request, x_workspace_id: str | None) -> str:
@@ -48,7 +74,27 @@ def get_workspace_id(request: Request, x_workspace_id: str | None) -> str:
 
 
 def create_app(testing: bool = False) -> FastAPI:
-    app = FastAPI()
+    app = FastAPI(
+        title="Reddit Insight Collector API",
+        version="0.2.0",
+        summary="Async Reddit research service for planner integrations.",
+        description=(
+            "Collect Reddit posts and comments into workspace-scoped research jobs, "
+            "then expose normalized posts, planner-friendly insights, and job summaries."
+        ),
+        contact={"name": "InnokentyB", "url": "https://github.com/InnokentyB/reddit-parser"},
+        docs_url="/docs",
+        redoc_url="/redoc",
+        openapi_url="/openapi.json",
+        openapi_tags=[
+            {"name": "health", "description": "Operational health and readiness."},
+            {"name": "search", "description": "Create, poll, and refresh async Reddit research jobs."},
+            {"name": "posts", "description": "Read normalized Reddit posts and comments."},
+            {"name": "insights", "description": "Planner-friendly insight extraction and aggregated summaries."},
+            {"name": "templates", "description": "Saved query templates, YAML import, and scheduled reruns."},
+            {"name": "ui", "description": "Basic inspection and debugging UI endpoints."},
+        ],
+    )
     app.state.testing = testing
     engine, session_factory = create_engine_and_sessionmaker(
         testing=testing,
@@ -76,8 +122,8 @@ def create_app(testing: bool = False) -> FastAPI:
             retryable=exc.retryable,
         )
 
-    @app.get("/health")
-    async def health():
+    @app.get("/health", response_model=HealthResponse, tags=["health"], summary="Health check")
+    async def health() -> dict[str, str]:
         return {"status": "ok"}
 
     @app.get("/", response_class=HTMLResponse)
@@ -97,51 +143,116 @@ def create_app(testing: bool = False) -> FastAPI:
             },
         )
 
-    @app.get("/ui/jobs")
+    @app.get("/ui/jobs", response_model=UiJobsResponse, tags=["ui"], summary="List recent jobs for the UI")
     async def ui_jobs(
         workspace_id: str = Query(...),
     ):
         jobs = app.state.repository.list_recent_jobs(workspace_id=workspace_id, limit=20)
         return {"jobs": jobs}
 
-    @app.get("/ui/templates")
+    @app.get(
+        "/ui/templates",
+        response_model=UiTemplatesResponse,
+        tags=["ui"],
+        summary="List templates for the UI",
+    )
     async def ui_templates(
         workspace_id: str = Query(...),
     ):
         templates = app.state.repository.list_templates(workspace_id=workspace_id, limit=100)
         return {"templates": templates}
 
-    @app.get("/posts")
+    @app.get(
+        "/posts",
+        response_model=PostsListResponse,
+        tags=["posts"],
+        summary="List normalized Reddit posts for a workspace",
+        responses=STANDARD_ERROR_RESPONSES,
+    )
     async def list_posts(
         request: Request,
         limit: int = 25,
         offset: int = 0,
-        x_workspace_id: str | None = Header(default=None, alias="X-Workspace-Id"),
+        x_workspace_id: str | None = Header(
+            default=None,
+            alias="X-Workspace-Id",
+            description="Workspace or project isolation key.",
+        ),
     ):
-        get_workspace_id(request, x_workspace_id)
+        workspace_id = get_workspace_id(request, x_workspace_id)
         validated_limit, validated_offset = validate_posts_query(limit=limit, offset=offset)
-        return app.state.repository.list_posts(validated_limit, validated_offset)
+        return app.state.repository.list_posts(validated_limit, validated_offset, workspace_id)
 
-    @app.get("/posts/{reddit_post_id}")
+    @app.get(
+        "/posts/{reddit_post_id}",
+        response_model=PostDetailResponse,
+        tags=["posts"],
+        summary="Get one normalized post with comments",
+        responses=STANDARD_ERROR_RESPONSES,
+    )
     async def get_post(
         reddit_post_id: str,
         request: Request,
-        x_workspace_id: str | None = Header(default=None, alias="X-Workspace-Id"),
+        x_workspace_id: str | None = Header(
+            default=None,
+            alias="X-Workspace-Id",
+            description="Workspace or project isolation key.",
+        ),
     ):
-        get_workspace_id(request, x_workspace_id)
-        result = app.state.repository.get_post(reddit_post_id)
+        workspace_id = get_workspace_id(request, x_workspace_id)
+        result = app.state.repository.get_post(reddit_post_id, workspace_id)
         if result is None:
             raise AppError(404, "not_found", f"Post '{reddit_post_id}' was not found", [], False)
         return result
 
-    @app.post("/search")
-    async def create_search(
-        payload: dict[str, Any],
+    @app.get(
+        "/insights",
+        response_model=InsightsResponse,
+        tags=["insights"],
+        summary="List planner-friendly insights",
+        responses=STANDARD_ERROR_RESPONSES,
+    )
+    async def list_insights(
         request: Request,
-        x_workspace_id: str | None = Header(default=None, alias="X-Workspace-Id"),
+        limit: int = 25,
+        offset: int = 0,
+        job_id: str | None = None,
+        insight_type: str | None = Query(default=None, alias="type"),
+        x_workspace_id: str | None = Header(
+            default=None,
+            alias="X-Workspace-Id",
+            description="Workspace or project isolation key.",
+        ),
     ):
         workspace_id = get_workspace_id(request, x_workspace_id)
-        normalized_payload = validate_search_payload(payload)
+        validated_limit, validated_offset = validate_posts_query(limit=limit, offset=offset)
+        return app.state.repository.get_insights(
+            workspace_id=workspace_id,
+            limit=validated_limit,
+            offset=validated_offset,
+            job_id=job_id,
+            insight_type=insight_type,
+        )
+
+    @app.post(
+        "/search",
+        response_model=QueueResponse,
+        status_code=202,
+        tags=["search"],
+        summary="Create and queue a Reddit search job",
+        responses=STANDARD_ERROR_RESPONSES,
+    )
+    async def create_search(
+        payload: SearchRequest,
+        request: Request,
+        x_workspace_id: str | None = Header(
+            default=None,
+            alias="X-Workspace-Id",
+            description="Workspace or project isolation key.",
+        ),
+    ):
+        workspace_id = get_workspace_id(request, x_workspace_id)
+        normalized_payload = validate_search_payload(payload.model_dump(exclude_none=True))
         payload_hash = build_query_hash(normalized_payload)
         repository = app.state.repository
 
@@ -175,14 +286,25 @@ def create_app(testing: bool = False) -> FastAPI:
         )
         return JSONResponse(status_code=202, content=response_body)
 
-    @app.post("/search-templates/import")
+    @app.post(
+        "/search-templates/import",
+        response_model=TemplateImportResponse,
+        status_code=202,
+        tags=["templates"],
+        summary="Import a YAML or JSON query bank as saved templates",
+        responses=STANDARD_ERROR_RESPONSES,
+    )
     async def import_search_templates(
-        payload: dict[str, Any],
+        payload: TemplateImportRequest,
         request: Request,
-        x_workspace_id: str | None = Header(default=None, alias="X-Workspace-Id"),
+        x_workspace_id: str | None = Header(
+            default=None,
+            alias="X-Workspace-Id",
+            description="Workspace or project isolation key.",
+        ),
     ):
         workspace_id = get_workspace_id(request, x_workspace_id)
-        normalized_payload = validate_template_import_payload(payload)
+        normalized_payload = validate_template_import_payload(payload.model_dump(exclude_none=True))
         repository = app.state.repository
         payload_hash = build_query_hash(
             {
@@ -291,19 +413,39 @@ def create_app(testing: bool = False) -> FastAPI:
         )
         return JSONResponse(status_code=202, content=response_body)
 
-    @app.get("/search-templates")
+    @app.get(
+        "/search-templates",
+        response_model=TemplatesListResponse,
+        tags=["templates"],
+        summary="List saved search templates",
+        responses=STANDARD_ERROR_RESPONSES,
+    )
     async def list_search_templates(
         request: Request,
-        x_workspace_id: str | None = Header(default=None, alias="X-Workspace-Id"),
+        x_workspace_id: str | None = Header(
+            default=None,
+            alias="X-Workspace-Id",
+            description="Workspace or project isolation key.",
+        ),
     ):
         workspace_id = get_workspace_id(request, x_workspace_id)
         return {"templates": app.state.repository.list_templates(workspace_id=workspace_id, limit=100)}
 
-    @app.get("/search-templates/{template_id}")
+    @app.get(
+        "/search-templates/{template_id}",
+        response_model=SearchTemplateResponse,
+        tags=["templates"],
+        summary="Get one saved search template",
+        responses=STANDARD_ERROR_RESPONSES,
+    )
     async def get_search_template(
         template_id: str,
         request: Request,
-        x_workspace_id: str | None = Header(default=None, alias="X-Workspace-Id"),
+        x_workspace_id: str | None = Header(
+            default=None,
+            alias="X-Workspace-Id",
+            description="Workspace or project isolation key.",
+        ),
     ):
         workspace_id = get_workspace_id(request, x_workspace_id)
         template = app.state.repository.get_template(template_id, workspace_id)
@@ -311,15 +453,26 @@ def create_app(testing: bool = False) -> FastAPI:
             raise AppError(404, "not_found", f"Search template '{template_id}' was not found", [], False)
         return template
 
-    @app.post("/search-templates/{template_id}/run")
+    @app.post(
+        "/search-templates/{template_id}/run",
+        response_model=TemplateRunResponse,
+        status_code=202,
+        tags=["templates"],
+        summary="Queue an immediate run for a saved template",
+        responses=STANDARD_ERROR_RESPONSES,
+    )
     async def run_search_template(
         template_id: str,
-        payload: dict[str, Any],
+        payload: RefreshRequest,
         request: Request,
-        x_workspace_id: str | None = Header(default=None, alias="X-Workspace-Id"),
+        x_workspace_id: str | None = Header(
+            default=None,
+            alias="X-Workspace-Id",
+            description="Workspace or project isolation key.",
+        ),
     ):
         workspace_id = get_workspace_id(request, x_workspace_id)
-        normalized_payload = validate_refresh_payload(payload)
+        normalized_payload = validate_refresh_payload(payload.model_dump(exclude_none=True))
         repository = app.state.repository
         key = (
             workspace_id,
@@ -347,11 +500,21 @@ def create_app(testing: bool = False) -> FastAPI:
         )
         return JSONResponse(status_code=202, content=result)
 
-    @app.get("/search/{job_id}")
+    @app.get(
+        "/search/{job_id}",
+        response_model=SearchViewResponse,
+        tags=["search"],
+        summary="Get search job status and matched posts",
+        responses=STANDARD_ERROR_RESPONSES,
+    )
     async def get_search(
         job_id: str,
         request: Request,
-        x_workspace_id: str | None = Header(default=None, alias="X-Workspace-Id"),
+        x_workspace_id: str | None = Header(
+            default=None,
+            alias="X-Workspace-Id",
+            description="Workspace or project isolation key.",
+        ),
     ):
         workspace_id = get_workspace_id(request, x_workspace_id)
         result = app.state.repository.get_search_view(job_id, workspace_id)
@@ -359,15 +522,48 @@ def create_app(testing: bool = False) -> FastAPI:
             raise AppError(404, "not_found", f"Search job '{job_id}' was not found", [], False)
         return result
 
-    @app.post("/refresh/{job_id}")
-    async def refresh_search(
+    @app.get(
+        "/summaries/{job_id}",
+        response_model=SummaryResponse,
+        tags=["insights"],
+        summary="Get planning summary groups for one completed or partial job",
+        responses=STANDARD_ERROR_RESPONSES,
+    )
+    async def get_summary(
         job_id: str,
-        payload: dict[str, Any],
         request: Request,
-        x_workspace_id: str | None = Header(default=None, alias="X-Workspace-Id"),
+        x_workspace_id: str | None = Header(
+            default=None,
+            alias="X-Workspace-Id",
+            description="Workspace or project isolation key.",
+        ),
     ):
         workspace_id = get_workspace_id(request, x_workspace_id)
-        normalized_payload = validate_refresh_payload(payload)
+        result = app.state.repository.get_summary(workspace_id=workspace_id, job_id=job_id)
+        if result is None:
+            raise AppError(404, "not_found", f"Search job '{job_id}' was not found", [], False)
+        return result
+
+    @app.post(
+        "/refresh/{job_id}",
+        response_model=QueueResponse,
+        status_code=202,
+        tags=["search"],
+        summary="Queue a refresh run for an existing search job",
+        responses=STANDARD_ERROR_RESPONSES,
+    )
+    async def refresh_search(
+        job_id: str,
+        payload: RefreshRequest,
+        request: Request,
+        x_workspace_id: str | None = Header(
+            default=None,
+            alias="X-Workspace-Id",
+            description="Workspace or project isolation key.",
+        ),
+    ):
+        workspace_id = get_workspace_id(request, x_workspace_id)
+        normalized_payload = validate_refresh_payload(payload.model_dump(exclude_none=True))
         repository = app.state.repository
         job = repository.get_job(job_id, workspace_id)
         if job is None:

@@ -28,6 +28,20 @@ Then open:
 http://127.0.0.1:8000
 ```
 
+API docs are also available at:
+
+```text
+http://127.0.0.1:8000/docs
+http://127.0.0.1:8000/redoc
+http://127.0.0.1:8000/openapi.json
+```
+
+The repository also contains an exported OpenAPI YAML snapshot at:
+
+```text
+docs/openapi.yaml
+```
+
 ### 1. Start the API
 
 ```bash
@@ -127,6 +141,20 @@ curl -H 'X-Workspace-Id: test-workspace' \
   'http://127.0.0.1:8000/posts?limit=25&offset=0'
 ```
 
+### Get planner-friendly insights
+
+```bash
+curl -H 'X-Workspace-Id: test-workspace' \
+  'http://127.0.0.1:8000/insights?limit=25&offset=0'
+```
+
+### Get planning summary for one job
+
+```bash
+curl -H 'X-Workspace-Id: test-workspace' \
+  'http://127.0.0.1:8000/summaries/<job_id>'
+```
+
 ### Import a query bank as daily templates
 
 ```bash
@@ -167,3 +195,4 @@ curl -X POST 'http://127.0.0.1:8000/search-templates/<template_id>/run' \
 - `app.worker` handles Reddit ingestion and refresh runs
 - `app.scheduler` is the clean Render Cron / cronjob entrypoint for daily template reruns
 - `docker-compose.yml` is intended for local development; Render should provide `APP_DATABASE_URL` from its managed Postgres instance
+- `GET /posts`, `GET /posts/{reddit_post_id}`, `GET /insights`, and `GET /summaries/{job_id}` are workspace-scoped and require `X-Workspace-Id`

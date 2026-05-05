@@ -1,0 +1,2014 @@
+openapi: 3.1.0
+info:
+  title: Reddit Insight Collector API
+  summary: Async Reddit research service for planner integrations.
+  description: Collect Reddit posts and comments into workspace-scoped research jobs,
+    then expose normalized posts, planner-friendly insights, and job summaries.
+  contact:
+    name: InnokentyB
+    url: https://github.com/InnokentyB/reddit-parser
+  version: 0.2.0
+paths:
+  /health:
+    get:
+      tags:
+      - health
+      summary: Health check
+      operationId: health_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /:
+    get:
+      summary: Home
+      operationId: home__get
+      parameters:
+      - name: workspace_id
+        in: query
+        required: false
+        schema:
+          type: string
+          default: test-workspace
+          title: Workspace Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            text/html:
+              schema:
+                type: string
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /ui/jobs:
+    get:
+      tags:
+      - ui
+      summary: List recent jobs for the UI
+      operationId: ui_jobs_ui_jobs_get
+      parameters:
+      - name: workspace_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Workspace Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UiJobsResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /ui/templates:
+    get:
+      tags:
+      - ui
+      summary: List templates for the UI
+      operationId: ui_templates_ui_templates_get
+      parameters:
+      - name: workspace_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Workspace Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UiTemplatesResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /posts:
+    get:
+      tags:
+      - posts
+      summary: List normalized Reddit posts for a workspace
+      operationId: list_posts_posts_get
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 25
+          title: Limit
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 0
+          title: Offset
+      - name: X-Workspace-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Workspace or project isolation key.
+          title: X-Workspace-Id
+        description: Workspace or project isolation key.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PostsListResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Resource not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Idempotency or state conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Dependency or capacity issue
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /posts/{reddit_post_id}:
+    get:
+      tags:
+      - posts
+      summary: Get one normalized post with comments
+      operationId: get_post_posts__reddit_post_id__get
+      parameters:
+      - name: reddit_post_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Reddit Post Id
+      - name: X-Workspace-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Workspace or project isolation key.
+          title: X-Workspace-Id
+        description: Workspace or project isolation key.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PostDetailResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Resource not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Idempotency or state conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Dependency or capacity issue
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /insights:
+    get:
+      tags:
+      - insights
+      summary: List planner-friendly insights
+      operationId: list_insights_insights_get
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 25
+          title: Limit
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 0
+          title: Offset
+      - name: job_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Job Id
+      - name: type
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Type
+      - name: X-Workspace-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Workspace or project isolation key.
+          title: X-Workspace-Id
+        description: Workspace or project isolation key.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InsightsResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Resource not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Idempotency or state conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Dependency or capacity issue
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /search:
+    post:
+      tags:
+      - search
+      summary: Create and queue a Reddit search job
+      operationId: create_search_search_post
+      parameters:
+      - name: X-Workspace-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Workspace or project isolation key.
+          title: X-Workspace-Id
+        description: Workspace or project isolation key.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchRequest'
+      responses:
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueueResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Resource not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Idempotency or state conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Dependency or capacity issue
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /search-templates/import:
+    post:
+      tags:
+      - templates
+      summary: Import a YAML or JSON query bank as saved templates
+      operationId: import_search_templates_search_templates_import_post
+      parameters:
+      - name: X-Workspace-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Workspace or project isolation key.
+          title: X-Workspace-Id
+        description: Workspace or project isolation key.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TemplateImportRequest'
+      responses:
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateImportResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Resource not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Idempotency or state conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Dependency or capacity issue
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /search-templates:
+    get:
+      tags:
+      - templates
+      summary: List saved search templates
+      operationId: list_search_templates_search_templates_get
+      parameters:
+      - name: X-Workspace-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Workspace or project isolation key.
+          title: X-Workspace-Id
+        description: Workspace or project isolation key.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplatesListResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Resource not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Idempotency or state conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Dependency or capacity issue
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /search-templates/{template_id}:
+    get:
+      tags:
+      - templates
+      summary: Get one saved search template
+      operationId: get_search_template_search_templates__template_id__get
+      parameters:
+      - name: template_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Template Id
+      - name: X-Workspace-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Workspace or project isolation key.
+          title: X-Workspace-Id
+        description: Workspace or project isolation key.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Resource not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Idempotency or state conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Dependency or capacity issue
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /search-templates/{template_id}/run:
+    post:
+      tags:
+      - templates
+      summary: Queue an immediate run for a saved template
+      operationId: run_search_template_search_templates__template_id__run_post
+      parameters:
+      - name: template_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Template Id
+      - name: X-Workspace-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Workspace or project isolation key.
+          title: X-Workspace-Id
+        description: Workspace or project isolation key.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateRunResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Resource not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Idempotency or state conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Dependency or capacity issue
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /search/{job_id}:
+    get:
+      tags:
+      - search
+      summary: Get search job status and matched posts
+      operationId: get_search_search__job_id__get
+      parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Job Id
+      - name: X-Workspace-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Workspace or project isolation key.
+          title: X-Workspace-Id
+        description: Workspace or project isolation key.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchViewResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Resource not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Idempotency or state conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Dependency or capacity issue
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /summaries/{job_id}:
+    get:
+      tags:
+      - insights
+      summary: Get planning summary groups for one completed or partial job
+      operationId: get_summary_summaries__job_id__get
+      parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Job Id
+      - name: X-Workspace-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Workspace or project isolation key.
+          title: X-Workspace-Id
+        description: Workspace or project isolation key.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SummaryResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Resource not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Idempotency or state conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Dependency or capacity issue
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /refresh/{job_id}:
+    post:
+      tags:
+      - search
+      summary: Queue a refresh run for an existing search job
+      operationId: refresh_search_refresh__job_id__post
+      parameters:
+      - name: job_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Job Id
+      - name: X-Workspace-Id
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Workspace or project isolation key.
+          title: X-Workspace-Id
+        description: Workspace or project isolation key.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueueResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Resource not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Idempotency or state conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Dependency or capacity issue
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+components:
+  schemas:
+    CommentResponse:
+      properties:
+        reddit_comment_id:
+          type: string
+          title: Reddit Comment Id
+        comment_id:
+          type: string
+          title: Comment Id
+        reddit_post_id:
+          type: string
+          title: Reddit Post Id
+        parent_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Parent Id
+        author_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Author Name
+        author_username:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Author Username
+        body:
+          type: string
+          title: Body
+        body_text:
+          type: string
+          title: Body Text
+        created_at:
+          type: integer
+          title: Created At
+        created_utc:
+          type: integer
+          title: Created Utc
+        score:
+          type: integer
+          title: Score
+        permalink:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Permalink
+        is_op_comment:
+          type: boolean
+          title: Is Op Comment
+      additionalProperties: true
+      type: object
+      required:
+      - reddit_comment_id
+      - comment_id
+      - reddit_post_id
+      - body
+      - body_text
+      - created_at
+      - created_utc
+      - score
+      - is_op_comment
+      title: CommentResponse
+    ErrorBody:
+      properties:
+        code:
+          type: string
+          title: Code
+        message:
+          type: string
+          title: Message
+        details:
+          items:
+            $ref: '#/components/schemas/ErrorDetail'
+          type: array
+          title: Details
+        retryable:
+          type: boolean
+          title: Retryable
+        request_id:
+          type: string
+          title: Request Id
+      additionalProperties: true
+      type: object
+      required:
+      - code
+      - message
+      - retryable
+      - request_id
+      title: ErrorBody
+    ErrorDetail:
+      properties:
+        field:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Field
+        code:
+          type: string
+          title: Code
+        message:
+          type: string
+          title: Message
+      additionalProperties: true
+      type: object
+      required:
+      - code
+      - message
+      title: ErrorDetail
+    ErrorResponse:
+      properties:
+        error:
+          $ref: '#/components/schemas/ErrorBody'
+      additionalProperties: true
+      type: object
+      required:
+      - error
+      title: ErrorResponse
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    HealthResponse:
+      properties:
+        status:
+          type: string
+          const: ok
+          title: Status
+      additionalProperties: true
+      type: object
+      required:
+      - status
+      title: HealthResponse
+    InsightGroupsResponse:
+      properties:
+        topic_candidates:
+          items:
+            $ref: '#/components/schemas/InsightResponse'
+          type: array
+          title: Topic Candidates
+        pain_points:
+          items:
+            $ref: '#/components/schemas/InsightResponse'
+          type: array
+          title: Pain Points
+        questions_people_ask:
+          items:
+            $ref: '#/components/schemas/InsightResponse'
+          type: array
+          title: Questions People Ask
+        objections:
+          items:
+            $ref: '#/components/schemas/InsightResponse'
+          type: array
+          title: Objections
+        competitor_mentions:
+          items:
+            $ref: '#/components/schemas/InsightResponse'
+          type: array
+          title: Competitor Mentions
+        language_patterns:
+          items:
+            $ref: '#/components/schemas/InsightResponse'
+          type: array
+          title: Language Patterns
+        content_opportunities:
+          items:
+            $ref: '#/components/schemas/InsightResponse'
+          type: array
+          title: Content Opportunities
+      additionalProperties: true
+      type: object
+      title: InsightGroupsResponse
+    InsightResponse:
+      properties:
+        insight_id:
+          type: string
+          title: Insight Id
+        type:
+          type: string
+          title: Type
+        title:
+          type: string
+          title: Title
+        summary:
+          type: string
+          title: Summary
+        evidence_count:
+          type: integer
+          title: Evidence Count
+        sample_quotes:
+          items:
+            type: string
+          type: array
+          title: Sample Quotes
+        source_post_ids:
+          items:
+            type: string
+          type: array
+          title: Source Post Ids
+        source_comment_ids:
+          items:
+            type: string
+          type: array
+          title: Source Comment Ids
+        subreddits:
+          items:
+            type: string
+          type: array
+          title: Subreddits
+        first_seen_at:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: First Seen At
+        last_seen_at:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Last Seen At
+        confidence:
+          type: number
+          title: Confidence
+        priority:
+          type: integer
+          title: Priority
+      additionalProperties: true
+      type: object
+      required:
+      - insight_id
+      - type
+      - title
+      - summary
+      - evidence_count
+      - confidence
+      - priority
+      title: InsightResponse
+    InsightsResponse:
+      properties:
+        data:
+          items:
+            $ref: '#/components/schemas/InsightResponse'
+          type: array
+          title: Data
+        groups:
+          $ref: '#/components/schemas/InsightGroupsResponse'
+        pagination:
+          $ref: '#/components/schemas/PaginationResponse'
+        ordering:
+          type: string
+          title: Ordering
+      additionalProperties: true
+      type: object
+      required:
+      - groups
+      - pagination
+      - ordering
+      title: InsightsResponse
+    LatestRunResponse:
+      properties:
+        run_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Run Id
+        status:
+          type: string
+          title: Status
+        trigger_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Trigger Type
+        started_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Started At
+        finished_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Finished At
+        posts_found:
+          type: integer
+          title: Posts Found
+        comments_found:
+          type: integer
+          title: Comments Found
+        partial:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Partial
+        error_code:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error Code
+        error_message:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error Message
+      additionalProperties: true
+      type: object
+      required:
+      - status
+      - posts_found
+      - comments_found
+      title: LatestRunResponse
+    PaginationResponse:
+      properties:
+        limit:
+          type: integer
+          title: Limit
+        offset:
+          type: integer
+          title: Offset
+        returned:
+          type: integer
+          title: Returned
+        has_more:
+          type: boolean
+          title: Has More
+      additionalProperties: true
+      type: object
+      required:
+      - limit
+      - offset
+      - returned
+      - has_more
+      title: PaginationResponse
+    PostDetailResponse:
+      properties:
+        reddit_post_id:
+          type: string
+          title: Reddit Post Id
+        post_id:
+          type: string
+          title: Post Id
+        workspace_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Workspace Id
+        subreddit:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Subreddit
+        title:
+          type: string
+          title: Title
+        body:
+          type: string
+          title: Body
+        body_text:
+          type: string
+          title: Body Text
+        author_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Author Name
+        created_at:
+          type: integer
+          title: Created At
+        created_utc:
+          type: integer
+          title: Created Utc
+        score:
+          type: integer
+          title: Score
+        num_comments:
+          type: integer
+          title: Num Comments
+        permalink:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Permalink
+        url:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Url
+        is_removed:
+          type: boolean
+          title: Is Removed
+        is_locked:
+          type: boolean
+          title: Is Locked
+        is_archived:
+          type: boolean
+          title: Is Archived
+        matched_query_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Matched Query Id
+        flair:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Flair
+        external_links:
+          items:
+            type: string
+          type: array
+          title: External Links
+        top_3_comments:
+          items:
+            $ref: '#/components/schemas/TopCommentResponse'
+          type: array
+          title: Top 3 Comments
+        comments:
+          items:
+            $ref: '#/components/schemas/CommentResponse'
+          type: array
+          title: Comments
+        enrichment:
+          anyOf:
+          - type: object
+          - type: 'null'
+          title: Enrichment
+      additionalProperties: true
+      type: object
+      required:
+      - reddit_post_id
+      - post_id
+      - title
+      - body
+      - body_text
+      - created_at
+      - created_utc
+      - score
+      - num_comments
+      - is_removed
+      - is_locked
+      - is_archived
+      title: PostDetailResponse
+    PostResponse:
+      properties:
+        reddit_post_id:
+          type: string
+          title: Reddit Post Id
+        post_id:
+          type: string
+          title: Post Id
+        workspace_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Workspace Id
+        subreddit:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Subreddit
+        title:
+          type: string
+          title: Title
+        body:
+          type: string
+          title: Body
+        body_text:
+          type: string
+          title: Body Text
+        author_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Author Name
+        created_at:
+          type: integer
+          title: Created At
+        created_utc:
+          type: integer
+          title: Created Utc
+        score:
+          type: integer
+          title: Score
+        num_comments:
+          type: integer
+          title: Num Comments
+        permalink:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Permalink
+        url:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Url
+        is_removed:
+          type: boolean
+          title: Is Removed
+        is_locked:
+          type: boolean
+          title: Is Locked
+        is_archived:
+          type: boolean
+          title: Is Archived
+        matched_query_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Matched Query Id
+        flair:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Flair
+        external_links:
+          items:
+            type: string
+          type: array
+          title: External Links
+        top_3_comments:
+          items:
+            $ref: '#/components/schemas/TopCommentResponse'
+          type: array
+          title: Top 3 Comments
+      additionalProperties: true
+      type: object
+      required:
+      - reddit_post_id
+      - post_id
+      - title
+      - body
+      - body_text
+      - created_at
+      - created_utc
+      - score
+      - num_comments
+      - is_removed
+      - is_locked
+      - is_archived
+      title: PostResponse
+    PostsListResponse:
+      properties:
+        data:
+          items:
+            $ref: '#/components/schemas/PostResponse'
+          type: array
+          title: Data
+        pagination:
+          $ref: '#/components/schemas/PaginationResponse'
+        ordering:
+          type: string
+          title: Ordering
+      additionalProperties: true
+      type: object
+      required:
+      - data
+      - pagination
+      - ordering
+      title: PostsListResponse
+    QueueResponse:
+      properties:
+        job_id:
+          type: string
+          title: Job Id
+        run_id:
+          type: string
+          title: Run Id
+        status:
+          type: string
+          const: queued
+          title: Status
+      additionalProperties: true
+      type: object
+      required:
+      - job_id
+      - run_id
+      - status
+      title: QueueResponse
+    RefreshRequest:
+      properties:
+        idempotency_key:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Idempotency Key
+      additionalProperties: true
+      type: object
+      title: RefreshRequest
+    SearchQueryResponse:
+      properties:
+        query_definition_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Query Definition Id
+        intent:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Intent
+        cluster:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Cluster
+        priority:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Priority
+        query_mode:
+          type: string
+          title: Query Mode
+        query_text:
+          type: string
+          title: Query Text
+        subreddit:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Subreddit
+        subreddits:
+          items:
+            type: string
+          type: array
+          title: Subreddits
+        match_must_include_any:
+          items:
+            type: string
+          type: array
+          title: Match Must Include Any
+        exclude_if_contains:
+          items:
+            type: string
+          type: array
+          title: Exclude If Contains
+        exclude_regexes:
+          items:
+            type: string
+          type: array
+          title: Exclude Regexes
+        min_score:
+          type: integer
+          title: Min Score
+        date_from:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Date From
+        date_to:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Date To
+        limit:
+          type: integer
+          title: Limit
+        include_comments:
+          type: boolean
+          title: Include Comments
+        enrich:
+          type: boolean
+          title: Enrich
+      additionalProperties: true
+      type: object
+      required:
+      - query_mode
+      - query_text
+      - min_score
+      - limit
+      - include_comments
+      - enrich
+      title: SearchQueryResponse
+    SearchRequest:
+      properties:
+        query:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Query
+          examples:
+          - AI course authoring tools
+        subreddit:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Subreddit
+          examples:
+          - instructionaldesign
+        subreddits:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Subreddits
+          examples:
+          - - instructionaldesign
+            - edtech
+        id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Id
+          description: Structured query definition id
+        intent:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Intent
+        cluster:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Cluster
+        priority:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Priority
+        match_must_include_any:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Match Must Include Any
+        exclude_if_contains:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Exclude If Contains
+        exclude_regexes:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Exclude Regexes
+        limit:
+          type: integer
+          title: Limit
+          default: 25
+        min_score:
+          type: integer
+          title: Min Score
+          default: 0
+        date_from:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Date From
+        date_to:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Date To
+        include_comments:
+          type: boolean
+          title: Include Comments
+          default: false
+        enrich:
+          type: boolean
+          title: Enrich
+          default: false
+        idempotency_key:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Idempotency Key
+          examples:
+          - 11111111-1111-1111-1111-111111111111
+      additionalProperties: true
+      type: object
+      title: SearchRequest
+    SearchResultsResponse:
+      properties:
+        total_posts:
+          type: integer
+          title: Total Posts
+        returned_posts:
+          type: integer
+          title: Returned Posts
+        ordering:
+          type: string
+          title: Ordering
+        items:
+          items:
+            $ref: '#/components/schemas/PostResponse'
+          type: array
+          title: Items
+      additionalProperties: true
+      type: object
+      required:
+      - total_posts
+      - returned_posts
+      - ordering
+      title: SearchResultsResponse
+    SearchViewResponse:
+      properties:
+        job_id:
+          type: string
+          title: Job Id
+        workspace_id:
+          type: string
+          title: Workspace Id
+        status:
+          type: string
+          title: Status
+        query:
+          $ref: '#/components/schemas/SearchQueryResponse'
+        latest_run:
+          $ref: '#/components/schemas/LatestRunResponse'
+        results:
+          $ref: '#/components/schemas/SearchResultsResponse'
+      additionalProperties: true
+      type: object
+      required:
+      - job_id
+      - workspace_id
+      - status
+      - query
+      - latest_run
+      - results
+      title: SearchViewResponse
+    SummaryResponse:
+      properties:
+        job_id:
+          type: string
+          title: Job Id
+        workspace_id:
+          type: string
+          title: Workspace Id
+        status:
+          type: string
+          title: Status
+        latest_run:
+          $ref: '#/components/schemas/LatestRunResponse'
+        generated_from_posts:
+          type: integer
+          title: Generated From Posts
+        groups:
+          $ref: '#/components/schemas/InsightGroupsResponse'
+      additionalProperties: true
+      type: object
+      required:
+      - job_id
+      - workspace_id
+      - status
+      - latest_run
+      - generated_from_posts
+      - groups
+      title: SummaryResponse
+    TemplateImportItemResponse:
+      properties:
+        job_id:
+          type: string
+          title: Job Id
+        run_id:
+          type: string
+          title: Run Id
+        status:
+          type: string
+          const: queued
+          title: Status
+        template_id:
+          type: string
+          title: Template Id
+        search_job_id:
+          type: string
+          title: Search Job Id
+        schedule_enabled:
+          type: boolean
+          title: Schedule Enabled
+        schedule_interval_hours:
+          type: integer
+          title: Schedule Interval Hours
+        next_run_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Run At
+      additionalProperties: true
+      type: object
+      required:
+      - job_id
+      - run_id
+      - status
+      - template_id
+      - search_job_id
+      - schedule_enabled
+      - schedule_interval_hours
+      title: TemplateImportItemResponse
+    TemplateImportRequest:
+      properties:
+        yaml_content:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Yaml Content
+        query_bank:
+          anyOf:
+          - type: object
+          - type: 'null'
+          title: Query Bank
+        schedule_daily:
+          type: boolean
+          title: Schedule Daily
+          default: true
+        limit:
+          type: integer
+          title: Limit
+          default: 50
+        min_score:
+          type: integer
+          title: Min Score
+          default: 0
+        date_from:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Date From
+        date_to:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Date To
+        include_comments:
+          type: boolean
+          title: Include Comments
+          default: true
+        enrich:
+          type: boolean
+          title: Enrich
+          default: true
+        idempotency_key:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Idempotency Key
+      additionalProperties: true
+      type: object
+      title: TemplateImportRequest
+    TemplateImportResponse:
+      properties:
+        status:
+          type: string
+          const: queued
+          title: Status
+        imported_templates:
+          type: integer
+          title: Imported Templates
+        templates:
+          items:
+            $ref: '#/components/schemas/TemplateImportItemResponse'
+          type: array
+          title: Templates
+      additionalProperties: true
+      type: object
+      required:
+      - status
+      - imported_templates
+      - templates
+      title: TemplateImportResponse
+    TemplateResponse:
+      properties:
+        template_id:
+          type: string
+          title: Template Id
+        name:
+          type: string
+          title: Name
+        query_definition_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Query Definition Id
+        source_version:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source Version
+        search_job_id:
+          type: string
+          title: Search Job Id
+        schedule_enabled:
+          type: boolean
+          title: Schedule Enabled
+        schedule_interval_hours:
+          type: integer
+          title: Schedule Interval Hours
+        last_run_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Last Run At
+        next_run_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Next Run At
+        query_payload:
+          type: object
+          title: Query Payload
+        source_metadata:
+          type: object
+          title: Source Metadata
+      additionalProperties: true
+      type: object
+      required:
+      - template_id
+      - name
+      - search_job_id
+      - schedule_enabled
+      - schedule_interval_hours
+      title: TemplateResponse
+    TemplateRunResponse:
+      properties:
+        template_id:
+          type: string
+          title: Template Id
+        job_id:
+          type: string
+          title: Job Id
+        run_id:
+          type: string
+          title: Run Id
+        status:
+          type: string
+          const: queued
+          title: Status
+      additionalProperties: true
+      type: object
+      required:
+      - template_id
+      - job_id
+      - run_id
+      - status
+      title: TemplateRunResponse
+    TemplatesListResponse:
+      properties:
+        templates:
+          items:
+            $ref: '#/components/schemas/TemplateResponse'
+          type: array
+          title: Templates
+      additionalProperties: true
+      type: object
+      required:
+      - templates
+      title: TemplatesListResponse
+    TopCommentResponse:
+      properties:
+        comment_id:
+          type: string
+          title: Comment Id
+        author_username:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Author Username
+        body_text_truncated_500:
+          type: string
+          title: Body Text Truncated 500
+        score:
+          type: integer
+          title: Score
+        is_op_comment:
+          type: boolean
+          title: Is Op Comment
+        created_utc:
+          type: integer
+          title: Created Utc
+      additionalProperties: true
+      type: object
+      required:
+      - comment_id
+      - body_text_truncated_500
+      - score
+      - is_op_comment
+      - created_utc
+      title: TopCommentResponse
+    UiJobsResponse:
+      properties:
+        jobs:
+          items:
+            type: object
+          type: array
+          title: Jobs
+      additionalProperties: true
+      type: object
+      required:
+      - jobs
+      title: UiJobsResponse
+    UiTemplatesResponse:
+      properties:
+        templates:
+          items:
+            $ref: '#/components/schemas/TemplateResponse'
+          type: array
+          title: Templates
+      additionalProperties: true
+      type: object
+      required:
+      - templates
+      title: UiTemplatesResponse
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+tags:
+- name: health
+  description: Operational health and readiness.
+- name: search
+  description: Create, poll, and refresh async Reddit research jobs.
+- name: posts
+  description: Read normalized Reddit posts and comments.
+- name: insights
+  description: Planner-friendly insight extraction and aggregated summaries.
+- name: templates
+  description: Saved query templates, YAML import, and scheduled reruns.
+- name: ui
+  description: Basic inspection and debugging UI endpoints.

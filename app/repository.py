@@ -8,6 +8,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import sessionmaker
 
 from app.domain.comments import select_api_comments
+from app.domain.insights import build_insight_groups, flatten_insights
 from app.domain.jobs import project_search_job_status
 from app.models import (
     CommentModel,
@@ -178,10 +179,12 @@ class Repository:
             session.commit()
         return {"job_id": job_id, "run_id": run_id, "status": "queued"}
 
-    def list_posts(self, limit: int, offset: int) -> dict:
+    def list_posts(self, limit: int, offset: int, workspace_id: str) -> dict:
         with self.session_factory() as session:
+            scoped_post_ids = self._workspace_post_ids_subquery(session, workspace_id)
             stmt = (
                 select(PostModel)
+                .join(scoped_post_ids, scoped_post_ids.c.reddit_post_id == PostModel.reddit_post_id)
                 .order_by(PostModel.created_utc.desc(), PostModel.reddit_post_id.asc())
                 .limit(limit)
                 .offset(offset)
@@ -189,7 +192,10 @@ class Repository:
             rows = list(session.execute(stmt).scalars())
             comments_map = self._load_comments_map(session, [row.reddit_post_id for row in rows])
         return {
-            "data": [self._serialize_post(row, comments_map.get(row.reddit_post_id, [])) for row in rows],
+            "data": [
+                self._serialize_post(row, comments_map.get(row.reddit_post_id, []), workspace_id=workspace_id)
+                for row in rows
+            ],
             "pagination": {
                 "limit": limit,
                 "offset": offset,
@@ -199,9 +205,18 @@ class Repository:
             "ordering": "created_utc_desc",
         }
 
-    def get_post(self, reddit_post_id: str) -> dict | None:
+    def get_post(self, reddit_post_id: str, workspace_id: str) -> dict | None:
         with self.session_factory() as session:
-            post = session.get(PostModel, reddit_post_id)
+            access_stmt = (
+                select(PostModel)
+                .join(JobPostModel, JobPostModel.reddit_post_id == PostModel.reddit_post_id)
+                .join(SearchJobModel, SearchJobModel.id == JobPostModel.search_job_id)
+                .where(
+                    PostModel.reddit_post_id == reddit_post_id,
+                    SearchJobModel.workspace_id == workspace_id,
+                )
+            )
+            post = session.execute(access_stmt).scalars().first()
             if post is None:
                 return None
             comments_stmt = (
@@ -210,7 +225,7 @@ class Repository:
                 .order_by(CommentModel.score.desc(), CommentModel.created_utc.asc(), CommentModel.reddit_comment_id.asc())
             )
             comments = list(session.execute(comments_stmt).scalars())
-        payload = self._serialize_post(post, comments)
+        payload = self._serialize_post(post, comments, workspace_id=workspace_id)
         payload["comments"] = [self._serialize_comment(comment, post.author_name) for comment in comments]
         payload["enrichment"] = None
         return payload
@@ -238,7 +253,14 @@ class Repository:
                 posts = list(session.execute(post_stmt).scalars())
                 comments_map = self._load_comments_map(session, [post.reddit_post_id for post in posts])
                 total_posts = len(posts)
-                items = [self._serialize_post(post, comments_map.get(post.reddit_post_id, [])) for post in posts]
+                items = [
+                    self._serialize_post(
+                        post,
+                        comments_map.get(post.reddit_post_id, []),
+                        workspace_id=job.workspace_id,
+                    )
+                    for post in posts
+                ]
         latest_run_status = run.status if run is not None else "completed"
         return {
             "job_id": job.id,
@@ -281,6 +303,72 @@ class Repository:
                 "ordering": "matched_at_desc",
                 "items": items,
             },
+        }
+
+    def get_insights(
+        self,
+        *,
+        workspace_id: str,
+        limit: int,
+        offset: int,
+        job_id: str | None = None,
+        insight_type: str | None = None,
+    ) -> dict:
+        run_id = None
+        if job_id is not None:
+            with self.session_factory() as session:
+                job = session.execute(
+                    select(SearchJobModel).where(
+                        SearchJobModel.id == job_id,
+                        SearchJobModel.workspace_id == workspace_id,
+                    )
+                ).scalar_one_or_none()
+                if job is None:
+                    return {
+                        "data": [],
+                        "groups": build_insight_groups([]),
+                        "pagination": {
+                            "limit": limit,
+                            "offset": offset,
+                            "returned": 0,
+                            "has_more": False,
+                        },
+                        "ordering": "priority_desc",
+                    }
+                run_id = job.active_run_id
+        posts = self._load_workspace_posts(workspace_id=workspace_id, job_id=job_id, run_id=run_id)
+        groups = build_insight_groups(posts)
+        items = flatten_insights(groups, insight_type=insight_type)
+        paged = items[offset : offset + limit]
+        return {
+            "data": paged,
+            "groups": groups,
+            "pagination": {
+                "limit": limit,
+                "offset": offset,
+                "returned": len(paged),
+                "has_more": offset + limit < len(items),
+            },
+            "ordering": "priority_desc",
+        }
+
+    def get_summary(self, *, workspace_id: str, job_id: str) -> dict | None:
+        search_view = self.get_search_view(job_id, workspace_id)
+        if search_view is None:
+            return None
+        posts = self._load_workspace_posts(
+            workspace_id=workspace_id,
+            job_id=job_id,
+            run_id=search_view["latest_run"]["run_id"],
+        )
+        groups = build_insight_groups(posts)
+        return {
+            "job_id": job_id,
+            "workspace_id": workspace_id,
+            "status": search_view["status"],
+            "latest_run": search_view["latest_run"],
+            "generated_from_posts": len(posts),
+            "groups": groups,
         }
 
     def claim_next_queued_run(self) -> dict | None:
@@ -713,7 +801,57 @@ class Repository:
             comments_map.setdefault(row.reddit_post_id, []).append(row)
         return comments_map
 
-    def _serialize_post(self, post: PostModel, comments: list[CommentModel]) -> dict:
+    def _load_workspace_posts(
+        self,
+        *,
+        workspace_id: str,
+        job_id: str | None = None,
+        run_id: str | None = None,
+    ) -> list[dict]:
+        with self.session_factory() as session:
+            post_stmt = (
+                select(PostModel)
+                .join(JobPostModel, JobPostModel.reddit_post_id == PostModel.reddit_post_id)
+                .join(SearchJobModel, SearchJobModel.id == JobPostModel.search_job_id)
+                .where(SearchJobModel.workspace_id == workspace_id)
+            )
+            if job_id is not None:
+                post_stmt = post_stmt.where(JobPostModel.search_job_id == job_id)
+            if run_id is not None:
+                post_stmt = post_stmt.where(JobPostModel.job_run_id == run_id)
+            post_stmt = post_stmt.order_by(JobPostModel.matched_at.desc(), PostModel.reddit_post_id.asc())
+            posts = list(session.execute(post_stmt).scalars().unique())
+            comments_map = self._load_comments_map(session, [post.reddit_post_id for post in posts])
+            serialized = []
+            for post in posts:
+                payload = self._serialize_post(
+                    post,
+                    comments_map.get(post.reddit_post_id, []),
+                    workspace_id=workspace_id,
+                )
+                payload["comments"] = [
+                    self._serialize_comment(comment, post.author_name)
+                    for comment in comments_map.get(post.reddit_post_id, [])
+                ]
+                serialized.append(payload)
+            return serialized
+
+    def _workspace_post_ids_subquery(self, session, workspace_id: str):
+        return (
+            select(JobPostModel.reddit_post_id.label("reddit_post_id"))
+            .join(SearchJobModel, SearchJobModel.id == JobPostModel.search_job_id)
+            .where(SearchJobModel.workspace_id == workspace_id)
+            .group_by(JobPostModel.reddit_post_id)
+            .subquery()
+        )
+
+    def _serialize_post(
+        self,
+        post: PostModel,
+        comments: list[CommentModel],
+        *,
+        workspace_id: str | None = None,
+    ) -> dict:
         top_comments = select_api_comments(
             [
                 {
@@ -737,13 +875,16 @@ class Repository:
             "reddit_post_id": post.reddit_post_id,
             "post_id": post.reddit_post_id,
             "platform": post.platform,
+            "workspace_id": workspace_id,
             "post_url": post.post_url,
             "subreddit": post.subreddit,
             "title": post.title,
+            "body": post.body_text,
             "body_text": post.body_text,
             "body_has_link": post.body_has_link,
             "author_name": post.author_name,
             "author_username": post.author_name,
+            "created_at": post.post_created_utc,
             "post_created_utc": post.post_created_utc,
             "fetched_at_utc": post.fetched_at_utc,
             "score": post.score,
@@ -754,7 +895,9 @@ class Repository:
             "is_archived": post.is_archived,
             "is_removed": post.is_removed,
             "is_stickied": post.is_stickied,
+            "flair": post.flair_text,
             "flair_text": post.flair_text,
+            "external_links": [post.post_external_link_url] if post.post_external_link_url else [],
             "matched_query_id": post.matched_query_id,
             "contract_version": post.contract_version,
             "author_account_age_days": post.author_account_age_days,
@@ -792,10 +935,14 @@ class Repository:
         return {
             "reddit_comment_id": comment.reddit_comment_id,
             "comment_id": comment.reddit_comment_id,
+            "reddit_post_id": comment.reddit_post_id,
+            "parent_id": comment.parent_comment_id,
+            "body": comment.body_text,
             "author_name": comment.author_name,
             "author_username": comment.author_name,
             "body_text": comment.body_text,
             "score": comment.score,
+            "created_at": comment.created_utc,
             "created_utc": comment.created_utc,
             "permalink": comment.permalink,
             "is_op_comment": comment.author_name == op_author_name,
