@@ -5,6 +5,7 @@ from datetime import date, datetime, timedelta, timezone
 from urllib.parse import urlparse
 import json
 import os
+import random
 import re
 import time
 from typing import Any
@@ -49,6 +50,8 @@ class RedditOAuthClient:
         timeout: float = 10.0,
         max_retries: int = 3,
         backoff_base_seconds: float = 0.25,
+        request_pause_seconds: float = 0.0,
+        request_pause_jitter_seconds: float = 0.0,
         transport: httpx.BaseTransport | None = None,
     ) -> None:
         if not client_id or not client_secret or not user_agent:
@@ -62,6 +65,9 @@ class RedditOAuthClient:
         self.max_retries = max_retries
         self.backoff_base_seconds = backoff_base_seconds
         self._token: OAuthToken | None = None
+        self.request_pause_seconds = max(request_pause_seconds, 0.0)
+        self.request_pause_jitter_seconds = max(request_pause_jitter_seconds, 0.0)
+        self._last_api_request_monotonic: float | None = None
         self._oauth_client = httpx.Client(
             base_url="https://www.reddit.com",
             timeout=self.timeout,
@@ -81,6 +87,8 @@ class RedditOAuthClient:
             client_id=os.getenv("REDDIT_CLIENT_ID", ""),
             client_secret=os.getenv("REDDIT_CLIENT_SECRET", ""),
             user_agent=os.getenv("REDDIT_USER_AGENT", ""),
+            request_pause_seconds=float(os.getenv("REDDIT_REQUEST_PAUSE_SECONDS", "2.0")),
+            request_pause_jitter_seconds=float(os.getenv("REDDIT_REQUEST_PAUSE_JITTER_SECONDS", "4.0")),
         )
 
     def get_access_token(self) -> str:
@@ -226,6 +234,7 @@ class RedditOAuthClient:
     ) -> Any:
         token = self.get_access_token()
         for attempt in range(1, self.max_retries + 1):
+            self._sleep_before_request()
             try:
                 response = self._api_client.request(
                     method,
@@ -255,6 +264,18 @@ class RedditOAuthClient:
 
     def _sleep(self, attempt: int) -> None:
         time.sleep(self.backoff_base_seconds * attempt)
+
+    def _sleep_before_request(self) -> None:
+        if self.request_pause_seconds <= 0 and self.request_pause_jitter_seconds <= 0:
+            return
+
+        now = time.monotonic()
+        elapsed = 0.0 if self._last_api_request_monotonic is None else max(now - self._last_api_request_monotonic, 0.0)
+        target_pause = self.request_pause_seconds + random.uniform(0.0, self.request_pause_jitter_seconds)
+        delay = max(target_pause - elapsed, 0.0)
+        if delay > 0:
+            time.sleep(delay)
+        self._last_api_request_monotonic = time.monotonic()
 
     @staticmethod
     def _normalize_post(data: dict[str, Any]) -> dict[str, Any]:

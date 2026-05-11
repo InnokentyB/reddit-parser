@@ -329,3 +329,24 @@ def test_reddit_client_retries_on_timeout(create_reddit_client, monkeypatch):
     assert posts == []
     assert attempts["count"] == 2
     assert sleeps
+
+
+def test_reddit_client_applies_humanized_request_pause(create_reddit_client, monkeypatch):
+    sleeps = []
+    monotonic_values = iter([10.0, 10.0, 11.0, 11.0])
+
+    monkeypatch.setattr("app.providers.reddit.random.uniform", lambda _a, _b: 0.0)
+    monkeypatch.setattr("app.providers.reddit.time.monotonic", lambda: next(monotonic_values))
+    monkeypatch.setattr("app.providers.reddit.time.sleep", lambda seconds: sleeps.append(seconds))
+
+    client = create_reddit_client(
+        client_id="id",
+        client_secret="secret",
+        user_agent="agent",
+        request_pause_seconds=2.0,
+    )
+
+    client._sleep_before_request()
+    client._sleep_before_request()
+
+    assert sleeps == [2.0, 1.0]
