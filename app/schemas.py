@@ -280,3 +280,37 @@ class UiJobsResponse(SchemaBase):
 
 class UiTemplatesResponse(SchemaBase):
     templates: list[TemplateResponse]
+
+
+class CreatorTrendItem(SchemaBase):
+    topic: str
+    posts: int
+    avg_score: float
+    avg_comments: float
+    trend_score: int
+
+
+class CreatorTrendsResponse(SchemaBase):
+    data: list[CreatorTrendItem] = Field(default_factory=list)
+
+
+class CreatorOpportunityItem(SchemaBase):
+    reddit_post_id: str
+    title: str
+    subreddit: str | None = None
+    score: int
+    num_comments: int
+    opportunity_score: int
+
+
+class CreatorOpportunitiesResponse(SchemaBase):
+    data: list[CreatorOpportunityItem] = Field(default_factory=list)
+
+
+class CreatorPerformanceResponse(SchemaBase):
+    author: str
+    total_posts: int
+    total_score: int
+    total_comments: int
+    avg_score: float
+    avg_comments: float

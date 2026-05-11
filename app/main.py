@@ -12,6 +12,7 @@ from fastapi.templating import Jinja2Templates
 from app.config import default_database_url
 from app.db import Base, create_engine_and_sessionmaker
 from app.domain.search import build_query_hash
+from app.creator_api import create_creator_app
 from app.errors import AppError, create_error_response
 from app.query_bank import parse_query_bank_yaml
 from app.repository import Repository
@@ -103,6 +104,7 @@ def create_app(testing: bool = False) -> FastAPI:
     Base.metadata.create_all(engine)
     app.state.engine = engine
     app.state.repository = Repository(session_factory)
+    app.mount("/creator-api", create_creator_app(app.state.repository, testing=testing))
 
     @app.middleware("http")
     async def request_context(request: Request, call_next):

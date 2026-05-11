@@ -1,6 +1,6 @@
 # Reddit Insight Collector (MVP)
 
-Minimal FastAPI + Postgres + worker scaffold for collecting and processing Reddit insight jobs, with a built-in UI, saved query templates, and a cron-friendly scheduler entrypoint.
+Minimal FastAPI + Postgres + worker scaffold for collecting and processing Reddit insight jobs, with a built-in UI, saved query templates, a creator-signals subservice API, and a cron-friendly scheduler entrypoint.
 
 ## What is included
 
@@ -85,6 +85,17 @@ export APP_DATABASE_URL=postgresql+psycopg2://postgres:postgres@127.0.0.1:5432/r
 ```
 
 If you want to point to Render later, use its Postgres connection string in `APP_DATABASE_URL`.
+
+
+### Creator signals subservice (same monorepo)
+
+The API now includes a separate creator-focused service mounted at `/creator-api`:
+
+- `GET /creator-api/trends` — aggregate topic trends by subreddit
+- `GET /creator-api/opportunities` — rank active threads for comment opportunities
+- `GET /creator-api/me/performance?author=<name>` — summarize post performance for one author
+
+All endpoints are workspace-scoped and use the same `X-Workspace-Id` header.
 
 ## Tests
 
