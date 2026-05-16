@@ -1,0 +1,8 @@
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+startCommand = "./bin/start scheduler"
+restartPolicyType = "NEVER"
+cronSchedule = "0 */6 * * *"

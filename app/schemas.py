@@ -32,6 +32,7 @@ class HealthResponse(SchemaBase):
 
 
 class SearchRequest(SchemaBase):
+    source: Literal["reddit", "indie_hackers"] | None = Field(default="reddit", examples=["reddit"])
     query: str | None = Field(default=None, examples=["AI course authoring tools"])
     subreddit: str | None = Field(default=None, examples=["instructionaldesign"])
     subreddits: list[str] | None = Field(default=None, examples=[["instructionaldesign", "edtech"]])
@@ -158,6 +159,7 @@ class LatestRunResponse(SchemaBase):
 
 
 class SearchQueryResponse(SchemaBase):
+    source: Literal["reddit", "indie_hackers"] = "reddit"
     query_definition_id: str | None = None
     intent: str | None = None
     cluster: str | None = None

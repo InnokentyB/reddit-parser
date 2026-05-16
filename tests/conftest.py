@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 import pytest
 
 from tests.support import (
+    build_indie_hackers_search_payload,
     build_query_bank_yaml,
     build_structured_search_payload,
     build_valid_search_payload,
@@ -24,6 +25,11 @@ def valid_search_payload() -> dict[str, object]:
 @pytest.fixture
 def structured_search_payload() -> dict[str, object]:
     return build_structured_search_payload()
+
+
+@pytest.fixture
+def indie_hackers_search_payload() -> dict[str, object]:
+    return build_indie_hackers_search_payload()
 
 
 @pytest.fixture

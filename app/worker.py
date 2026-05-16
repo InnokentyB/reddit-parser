@@ -10,6 +10,8 @@ from app.config import (
     ALLOWLIST_SUBREDDITS,
     COMPETITOR_KEYWORDS,
     CONTRACT_VERSION,
+    SOURCE_INDIE_HACKERS,
+    SOURCE_REDDIT,
     POST_PLATFORM,
     TOOLS_KEYWORDS,
     default_comment_limit_per_post,
@@ -17,7 +19,9 @@ from app.config import (
     default_query_cooldown_seconds,
     default_subreddit_snapshot_ttl_days,
 )
-from app.db import Base, create_engine_and_sessionmaker
+from app.db import Base, create_engine_and_sessionmaker, ensure_runtime_schema
+from app.providers.indie_hackers import IndieHackersFeedClient, IndieHackersTransientError
+from app.providers.reddit_factory import create_reddit_client_from_env
 from app.providers.reddit import RedditAuthError, RedditConfigurationError, RedditOAuthClient, RedditTransientError
 from app.repository import Repository
 
@@ -25,6 +29,7 @@ from app.repository import Repository
 def process_next(
     repository: Repository,
     reddit_client: RedditOAuthClient | object | None = None,
+    indie_hackers_client: IndieHackersFeedClient | object | None = None,
     *,
     comment_limit_per_post: int | None = None,
     query_cooldown_seconds: int | None = None,
@@ -48,7 +53,8 @@ def process_next(
         if subreddit_snapshot_ttl_days is not None
         else default_subreddit_snapshot_ttl_days()
     )
-    client = reddit_client or RedditOAuthClient.from_env()
+    source = run_context.get("source", SOURCE_REDDIT)
+    client = _resolve_source_client(source, reddit_client, indie_hackers_client)
     posts_found = 0
     comments_found = 0
     downstream_failed = False
@@ -64,7 +70,11 @@ def process_next(
             )
             return True
 
-        target_subreddits = _resolve_target_subreddits(run_context["subreddit"], run_context.get("subreddits", []))
+        target_subreddits = _resolve_target_subreddits(
+            source,
+            run_context["subreddit"],
+            run_context.get("subreddits", []),
+        )
         raw_posts = _search_posts_for_targets(client, run_context, target_subreddits)
         repository.touch_job_fetch_timestamp(run_context["job_id"])
 
@@ -79,7 +89,7 @@ def process_next(
                 run_context.get("exclude_regexes", []),
             ):
                 continue
-            post["platform"] = POST_PLATFORM
+            post["platform"] = post.get("platform") or (POST_PLATFORM if source == SOURCE_REDDIT else source)
             post["contract_version"] = CONTRACT_VERSION
             post["matched_query_id"] = run_context.get("query_definition_id") or run_context["job_id"]
 
@@ -87,7 +97,7 @@ def process_next(
             post.update(author_profile)
 
             subreddit = post.get("subreddit")
-            if subreddit:
+            if source == SOURCE_REDDIT and subreddit:
                 snapshot = repository.get_subreddit_snapshot(subreddit)
                 if snapshot is None or _snapshot_is_stale(snapshot.last_fetched_at, snapshot_ttl_days):
                     snapshot_payload = client.fetch_subreddit_snapshot(subreddit)
@@ -99,7 +109,7 @@ def process_next(
                     post["subreddit_rules_snapshot_url"] = snapshot.rules_snapshot_url
 
             thread_comments = []
-            if run_context["include_comments"]:
+            if run_context["include_comments"] and source == SOURCE_REDDIT:
                 try:
                     thread_comments = client.fetch_post_comments(
                         post["reddit_post_id"],
@@ -137,10 +147,10 @@ def process_next(
                 posts_found=posts_found,
                 comments_found=comments_found,
             )
-    except RedditTransientError as exc:
+    except (RedditTransientError, IndieHackersTransientError) as exc:
         repository.mark_run_retryable_failed(
             run_context["run_id"],
-            error_code="reddit_transient_error",
+            error_code=f"{source}_transient_error",
             error_message=str(exc),
         )
     except (RedditConfigurationError, RedditAuthError) as exc:
@@ -169,25 +179,42 @@ def main() -> int:
         database_url=default_database_url(),
     )
     Base.metadata.create_all(engine)
+    ensure_runtime_schema(engine)
     repository = Repository(session_factory)
-    reddit_client = RedditOAuthClient.from_env()
+    reddit_client = create_reddit_client_from_env()
+    indie_hackers_client = IndieHackersFeedClient()
 
     try:
         if args.once:
             repository.enqueue_due_template_runs()
-            process_next(repository, reddit_client)
+            process_next(repository, reddit_client, indie_hackers_client)
             return 0
 
         while True:
             repository.enqueue_due_template_runs()
-            processed = process_next(repository, reddit_client)
+            processed = process_next(repository, reddit_client, indie_hackers_client)
             if not processed:
                 time.sleep(args.poll_interval)
     finally:
         reddit_client.close()
+        indie_hackers_client.close()
 
 
-def _resolve_target_subreddits(subreddit: str | None, subreddits: list[str] | None = None) -> list[str]:
+def _resolve_source_client(
+    source: str,
+    reddit_client: RedditOAuthClient | object | None,
+    indie_hackers_client: IndieHackersFeedClient | object | None,
+) -> object:
+    if source == SOURCE_REDDIT:
+        return reddit_client or create_reddit_client_from_env()
+    if source == SOURCE_INDIE_HACKERS:
+        return indie_hackers_client or IndieHackersFeedClient()
+    raise ValueError(f"Source '{source}' is not supported")
+
+
+def _resolve_target_subreddits(source: str, subreddit: str | None, subreddits: list[str] | None = None) -> list[str]:
+    if source == SOURCE_INDIE_HACKERS:
+        return [None]
     normalized_subreddits = [item for item in (subreddits or []) if item]
     if normalized_subreddits:
         for item in normalized_subreddits:
@@ -201,7 +228,7 @@ def _resolve_target_subreddits(subreddit: str | None, subreddits: list[str] | No
     return [subreddit]
 
 
-def _search_posts_for_targets(client: RedditOAuthClient | object, run_context: dict, target_subreddits: list[str]) -> list[dict]:
+def _search_posts_for_targets(client: object, run_context: dict, target_subreddits: list[str | None]) -> list[dict]:
     deduped: dict[str, dict] = {}
     for subreddit in target_subreddits:
         posts = client.search_posts(

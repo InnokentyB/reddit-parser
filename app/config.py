@@ -9,7 +9,11 @@ DEFAULT_COMMENT_LIMIT_PER_POST = 20
 DEFAULT_QUERY_COOLDOWN_SECONDS = 60
 DEFAULT_SUBREDDIT_SNAPSHOT_TTL_DAYS = 7
 CONTRACT_VERSION = "1.0"
+SOURCE_REDDIT = "reddit"
+SOURCE_INDIE_HACKERS = "indie_hackers"
+SUPPORTED_SOURCES = {SOURCE_REDDIT, SOURCE_INDIE_HACKERS}
 POST_PLATFORM = "reddit"
+INDIE_HACKERS_FEED_URL = "https://www.indiehackers.com/feed.rss"
 
 ALLOWLIST_SUBREDDITS = {
     "instructionaldesign",
@@ -55,9 +59,10 @@ COMPETITOR_KEYWORDS = {
 
 
 def default_database_url() -> str:
-    return os.getenv(
-        "APP_DATABASE_URL",
-        "postgresql+psycopg2://postgres:postgres@127.0.0.1:5432/reddit_insight_collector",
+    return (
+        os.getenv("APP_DATABASE_URL")
+        or os.getenv("DATABASE_URL")
+        or "postgresql+psycopg2://postgres:postgres@127.0.0.1:5432/reddit_insight_collector"
     )
 
 

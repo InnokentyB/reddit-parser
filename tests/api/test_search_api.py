@@ -31,6 +31,31 @@ def test_post_search_accepts_structured_query_definition_payload(
     assert search_view["query"]["match_must_include_any"] == ["adaptive", "branching"]
 
 
+def test_post_search_accepts_indie_hackers_source_without_subreddit(
+    client, workspace_headers, indie_hackers_search_payload
+):
+    response = client.post("/search", json=indie_hackers_search_payload, headers=workspace_headers)
+
+    assert response.status_code == 202
+    body = response.json()
+    search_view = client.get(f"/search/{body['job_id']}", headers=workspace_headers).json()
+    assert search_view["query"]["source"] == "indie_hackers"
+    assert search_view["query"]["subreddit"] is None
+    assert search_view["query"]["subreddits"] == []
+
+
+def test_post_search_rejects_subreddit_for_indie_hackers_source(
+    client, workspace_headers, indie_hackers_search_payload
+):
+    payload = copy.deepcopy(indie_hackers_search_payload)
+    payload["subreddit"] = "indiehackers"
+
+    response = client.post("/search", json=payload, headers=workspace_headers)
+
+    assert response.status_code == 400
+    assert any(detail["field"] == "subreddit" for detail in response.json()["error"]["details"])
+
+
 def test_post_search_rejects_missing_query(client, workspace_headers, valid_search_payload):
     payload = copy.deepcopy(valid_search_payload)
     payload.pop("query")

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
-from app.config import ALLOWLIST_SUBREDDITS
+from app.config import ALLOWLIST_SUBREDDITS, SOURCE_INDIE_HACKERS, SOURCE_REDDIT, SUPPORTED_SOURCES
 from app.domain.search import normalize_query, normalize_search_expression, normalize_subreddit
 from app.errors import AppError
 
@@ -20,6 +20,15 @@ MAX_SUBREDDITS_PER_QUERY = 20
 def validate_search_payload(payload: dict[str, Any]) -> dict[str, Any]:
     details: list[dict[str, Any]] = []
     is_query_definition = isinstance(payload.get("subreddits"), list)
+    source = str(payload.get("source", SOURCE_REDDIT)).strip().lower() or SOURCE_REDDIT
+    if source not in SUPPORTED_SOURCES:
+        details.append(
+            {
+                "field": "source",
+                "code": "not_allowed",
+                "message": f"source must be one of: {', '.join(sorted(SUPPORTED_SOURCES))}",
+            }
+        )
 
     query = payload.get("query")
     if query is None:
@@ -53,7 +62,15 @@ def validate_search_payload(payload: dict[str, Any]) -> dict[str, Any]:
     subreddit = payload.get("subreddit")
     normalized_subreddit = None
     normalized_subreddits: list[str] = []
-    if subreddit is not None:
+    if source == SOURCE_INDIE_HACKERS and subreddit is not None:
+        details.append(
+            {
+                "field": "subreddit",
+                "code": "not_supported",
+                "message": "subreddit cannot be used when source is indie_hackers",
+            }
+        )
+    elif subreddit is not None:
         try:
             normalized_subreddit = normalize_subreddit(subreddit)
             if normalized_subreddit not in ALLOWLIST_SUBREDDITS:
@@ -74,7 +91,15 @@ def validate_search_payload(payload: dict[str, Any]) -> dict[str, Any]:
             )
 
     subreddits = payload.get("subreddits")
-    if subreddits is not None:
+    if source == SOURCE_INDIE_HACKERS and subreddits is not None:
+        details.append(
+            {
+                "field": "subreddits",
+                "code": "not_supported",
+                "message": "subreddits cannot be used when source is indie_hackers",
+            }
+        )
+    elif subreddits is not None:
         if not isinstance(subreddits, list) or not subreddits:
             details.append(
                 {
@@ -243,6 +268,7 @@ def validate_search_payload(payload: dict[str, Any]) -> dict[str, Any]:
         raise AppError(400, "invalid_request", "Request validation failed", details, False)
 
     return {
+        "source": source,
         "query_mode": "query_definition" if is_query_definition else "simple",
         "query": normalize_search_expression(query) if is_query_definition else normalize_query(query),
         "subreddit": normalized_subreddit,

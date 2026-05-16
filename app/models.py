@@ -22,6 +22,7 @@ class SearchJobModel(Base):
     query_intent: Mapped[str | None] = mapped_column(Text, nullable=True)
     query_cluster: Mapped[str | None] = mapped_column(String(128), nullable=True)
     query_priority: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source: Mapped[str] = mapped_column(String(32), default="reddit")
     subreddits_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     match_must_include_any_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     exclude_if_contains_json: Mapped[str | None] = mapped_column(Text, nullable=True)

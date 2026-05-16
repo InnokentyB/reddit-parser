@@ -241,6 +241,57 @@ def test_partial_comment_failure_marks_run_partial(
     assert search_view["results"]["total_posts"] == 1
 
 
+def test_worker_ingests_indie_hackers_feed_posts(
+    app, client, workspace_headers, indie_hackers_search_payload
+):
+    job = _queue_search_job(client, workspace_headers, indie_hackers_search_payload)
+    fake = FakeRedditClient(
+        posts=[
+            {
+                "reddit_post_id": "ih_188086a971c22f57a02b1433",
+                "platform": "indie_hackers",
+                "post_url": "https://www.indiehackers.com/post/bootstrapped-pricing",
+                "subreddit": None,
+                "title": "Bootstrapped SaaS pricing lessons",
+                "body_text": "Pricing experiments for bootstrapped SaaS founders.",
+                "body_has_link": True,
+                "author_name": "alice",
+                "post_created_utc": 1735689600,
+                "fetched_at_utc": 1735690000,
+                "score": 0,
+                "upvote_ratio": None,
+                "num_comments": 0,
+                "is_self_post": True,
+                "is_locked": False,
+                "is_archived": False,
+                "is_removed": False,
+                "is_stickied": False,
+                "flair_text": None,
+                "created_utc": 1735689600,
+                "permalink": "/post/bootstrapped-pricing",
+                "url": "https://www.indiehackers.com/post/bootstrapped-pricing",
+            }
+        ],
+    )
+
+    processed = process_next(app.state.repository, indie_hackers_client=fake)
+
+    assert processed is True
+
+    search_view = client.get(f"/search/{job['job_id']}", headers=workspace_headers).json()
+    assert search_view["query"]["source"] == "indie_hackers"
+    assert search_view["latest_run"]["status"] == "completed"
+    assert search_view["results"]["total_posts"] == 1
+    assert search_view["results"]["items"][0]["platform"] == "indie_hackers"
+    assert search_view["results"]["items"][0]["num_comments"] == 0
+
+    post_detail = client.get(
+        "/posts/ih_188086a971c22f57a02b1433",
+        headers=workspace_headers,
+    ).json()
+    assert post_detail["comments"] == []
+
+
 def test_transient_search_failure_marks_retryable_failed(
     app, client, workspace_headers, valid_search_payload
 ):

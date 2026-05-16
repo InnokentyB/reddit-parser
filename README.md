@@ -84,7 +84,7 @@ By default, the app now expects:
 export APP_DATABASE_URL=postgresql+psycopg2://postgres:postgres@127.0.0.1:5432/reddit_insight_collector
 ```
 
-If you want to point to Render later, use its Postgres connection string in `APP_DATABASE_URL`.
+If you want to point to Railway or another hosted Postgres later, use its connection string in `APP_DATABASE_URL` or `DATABASE_URL`.
 
 
 ### Creator signals subservice (same monorepo)
@@ -204,6 +204,199 @@ curl -X POST 'http://127.0.0.1:8000/search-templates/<template_id>/run' \
 - Default runtime database: local Postgres on `127.0.0.1:5432`
 - Tests use an isolated in-memory SQLite database
 - `app.worker` handles Reddit ingestion and refresh runs
-- `app.scheduler` is the clean Render Cron / cronjob entrypoint for daily template reruns
-- `docker-compose.yml` is intended for local development; Render should provide `APP_DATABASE_URL` from its managed Postgres instance
+- `app.scheduler` is the clean cron-job entrypoint for daily template reruns
+- `docker-compose.yml` is intended for local development; Railway should provide `APP_DATABASE_URL` from its managed Postgres instance
 - `GET /posts`, `GET /posts/{reddit_post_id}`, `GET /insights`, and `GET /summaries/{job_id}` are workspace-scoped and require `X-Workspace-Id`
+
+## Deploy on Railway
+
+This repo is now ready to deploy to Railway with one shared image and three service roles:
+
+- `api` for the public FastAPI app
+- `worker` for continuous background ingestion
+- `scheduler` for one-shot cron execution of due templates
+
+The container entrypoint is:
+
+```bash
+./bin/start <role>
+```
+
+### Railway config-as-code files
+
+Railway config-as-code applies to a single deployment at a time, not to an entire multi-service project, so this repo includes one config file per service:
+
+- API: [railway.toml](/Users/innokentyb/Documents/Reddit%20scrapper/railway.toml:1)
+- Worker: [railway/worker.toml](/Users/innokentyb/Documents/Reddit%20scrapper/railway/worker.toml:1)
+- Scheduler: [railway/scheduler.toml](/Users/innokentyb/Documents/Reddit%20scrapper/railway/scheduler.toml:1)
+
+In Railway, each service should point at the same repository, but use a different `Config as Code` path:
+
+- `api` service: `/railway.toml`
+- `worker` service: `/railway/worker.toml`
+- `scheduler` service: `/railway/scheduler.toml`
+
+### Recommended Railway layout
+
+Create these services in one Railway project:
+
+1. `postgres`
+2. `api`
+3. `worker`
+4. `scheduler`
+
+### 1. Provision Postgres
+
+Add Railway PostgreSQL to the project.
+
+The official Railway Postgres service exposes `DATABASE_URL`, which this app can consume directly or via `APP_DATABASE_URL`.
+
+### 2. Deploy the API service
+
+Use this repository as the source for the `api` service.
+
+Start command:
+
+```bash
+./bin/start api
+```
+
+Healthcheck path:
+
+```text
+/health
+```
+
+Required variables:
+
+```bash
+APP_DATABASE_URL=${{Postgres.DATABASE_URL}}
+REDDIT_PROVIDER=oauth
+REDDIT_CLIENT_ID=...
+REDDIT_CLIENT_SECRET=...
+REDDIT_USER_AGENT=...
+```
+
+Notes:
+
+- Railway injects `PORT`, and the API now listens on that port automatically.
+- If you only want Indie Hackers RSS ingestion, Reddit OAuth variables are not needed for those specific jobs.
+- If you want Reddit through headless browser instead of OAuth, set `REDDIT_PROVIDER=browser` and you can omit `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET`, and `REDDIT_USER_AGENT`.
+
+### 3. Deploy the worker service
+
+Create a second Railway service from the same repo.
+
+Config path:
+
+```text
+/railway/worker.toml
+```
+
+Effective start command:
+
+```bash
+./bin/start worker
+```
+
+Required variables:
+
+```bash
+APP_DATABASE_URL=${{Postgres.DATABASE_URL}}
+REDDIT_PROVIDER=oauth
+REDDIT_CLIENT_ID=...
+REDDIT_CLIENT_SECRET=...
+REDDIT_USER_AGENT=...
+```
+
+This service should stay always on.
+
+If you switch to browser mode instead:
+
+```bash
+APP_DATABASE_URL=${{Postgres.DATABASE_URL}}
+REDDIT_PROVIDER=browser
+REDDIT_BROWSER_HEADLESS=true
+REDDIT_BROWSER_TIMEOUT_MS=20000
+```
+
+### 4. Deploy the scheduler service
+
+Create a third Railway service from the same repo.
+
+Config path:
+
+```text
+/railway/scheduler.toml
+```
+
+Effective start command:
+
+```bash
+./bin/start scheduler
+```
+
+Required variables:
+
+```bash
+APP_DATABASE_URL=${{Postgres.DATABASE_URL}}
+```
+
+The default cron schedule in the checked-in config is every 6 hours:
+
+```text
+0 */6 * * *
+```
+
+The scheduler role intentionally runs `python -m app.scheduler --once` and exits, which matches Railway Cron Job expectations.
+
+### Reddit provider switch
+
+The app supports two Reddit backends:
+
+- `REDDIT_PROVIDER=oauth` for the official Reddit API
+- `REDDIT_PROVIDER=browser` for headless browser collection via Playwright
+
+Browser mode variables:
+
+```bash
+REDDIT_PROVIDER=browser
+REDDIT_BROWSER_HEADLESS=true
+REDDIT_BROWSER_TIMEOUT_MS=20000
+REDDIT_BROWSER_USER_AGENT=Mozilla/5.0
+```
+
+OAuth mode variables:
+
+```bash
+REDDIT_PROVIDER=oauth
+REDDIT_CLIENT_ID=...
+REDDIT_CLIENT_SECRET=...
+REDDIT_USER_AGENT=linux:com.yourname.redditinsight:1.0 (by /u/your_reddit_username)
+```
+
+### Smoke test after deploy
+
+Open:
+
+```text
+https://<your-api-domain>/health
+https://<your-api-domain>/docs
+```
+
+Then submit a test search:
+
+```bash
+curl -X POST 'https://<your-api-domain>/search' \
+  -H 'Content-Type: application/json' \
+  -H 'X-Workspace-Id: test-workspace' \
+  -d '{
+    "source": "indie_hackers",
+    "query": "bootstrapped saas pricing",
+    "limit": 10,
+    "min_score": 0,
+    "include_comments": false,
+    "enrich": false,
+    "idempotency_key": "99999999-9999-9999-9999-999999999999"
+  }'
+```

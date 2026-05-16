@@ -1,0 +1,12 @@
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+startCommand = "./bin/start api"
+healthcheckPath = "/health"
+healthcheckTimeout = 300
+restartPolicyType = "ALWAYS"
+restartPolicyMaxRetries = 10
+overlapSeconds = 10
+drainingSeconds = 10

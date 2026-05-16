@@ -1,0 +1,10 @@
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+startCommand = "./bin/start worker"
+restartPolicyType = "ALWAYS"
+restartPolicyMaxRetries = 10
+overlapSeconds = 10
+drainingSeconds = 10

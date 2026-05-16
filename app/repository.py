@@ -78,6 +78,7 @@ class Repository:
                 query_intent=payload.get("query_intent"),
                 query_cluster=payload.get("query_cluster"),
                 query_priority=payload.get("query_priority"),
+                source=payload.get("source", "reddit"),
                 subreddits_json=json.dumps(payload.get("subreddits", [])),
                 match_must_include_any_json=json.dumps(payload.get("match_must_include_any", [])),
                 exclude_if_contains_json=json.dumps(payload.get("exclude_if_contains", [])),
@@ -134,6 +135,7 @@ class Repository:
                 "query_intent": job.query_intent,
                 "query_cluster": job.query_cluster,
                 "query_priority": job.query_priority,
+                "source": job.source,
                 "subreddits": self._parse_json_list(job.subreddits_json),
                 "match_must_include_any": self._parse_json_list(job.match_must_include_any_json),
                 "exclude_if_contains": self._parse_json_list(job.exclude_if_contains_json),
@@ -266,8 +268,9 @@ class Repository:
             "job_id": job.id,
             "workspace_id": job.workspace_id,
             "status": "running" if latest_run_status in {"queued", "running"} else job.status,
-            "query": {
-                "query_definition_id": job.query_definition_id,
+                "query": {
+                    "source": job.source,
+                    "query_definition_id": job.query_definition_id,
                 "intent": job.query_intent,
                 "cluster": job.query_cluster,
                 "priority": job.query_priority,
@@ -501,6 +504,7 @@ class Repository:
                         "workspace_id": job.workspace_id,
                         "status": job.status,
                         "query": {
+                            "source": job.source,
                             "query_definition_id": job.query_definition_id,
                             "intent": job.query_intent,
                             "cluster": job.query_cluster,

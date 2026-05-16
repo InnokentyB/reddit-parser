@@ -4,7 +4,7 @@ import argparse
 import time
 
 from app.config import default_database_url
-from app.db import Base, create_engine_and_sessionmaker
+from app.db import Base, create_engine_and_sessionmaker, ensure_runtime_schema
 from app.repository import Repository
 
 
@@ -23,6 +23,7 @@ def main() -> int:
         database_url=default_database_url(),
     )
     Base.metadata.create_all(engine)
+    ensure_runtime_schema(engine)
     repository = Repository(session_factory)
 
     if args.once:

@@ -6,6 +6,8 @@ import re
 import unicodedata
 from typing import Any
 
+from app.config import SOURCE_REDDIT
+
 
 SUBREDDIT_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_]{1,20}$")
 
@@ -56,6 +58,7 @@ def build_query_hash(payload: dict[str, Any]) -> str:
     exclude_if_contains = [str(item).strip().lower() for item in payload.get("exclude_if_contains", [])]
     exclude_regexes = [str(item).strip() for item in payload.get("exclude_regexes", [])]
     normalized_payload = {
+        "source": str(payload.get("source", SOURCE_REDDIT)).strip().lower() or SOURCE_REDDIT,
         "query_mode": query_mode,
         "query": normalized_query,
         "subreddit": normalize_subreddit(payload.get("subreddit")),

@@ -28,6 +28,7 @@ def load_symbol(module_name: str, symbol_name: str) -> Any:
 
 def build_valid_search_payload() -> dict[str, Any]:
     return {
+        "source": "reddit",
         "query": "AI course authoring tools",
         "subreddit": "instructionaldesign",
         "limit": 50,
@@ -37,6 +38,20 @@ def build_valid_search_payload() -> dict[str, Any]:
         "include_comments": True,
         "enrich": True,
         "idempotency_key": "11111111-1111-1111-1111-111111111111",
+    }
+
+
+def build_indie_hackers_search_payload() -> dict[str, Any]:
+    return {
+        "source": "indie_hackers",
+        "query": "bootstrapped saas pricing",
+        "limit": 25,
+        "min_score": 0,
+        "date_from": "2025-01-01",
+        "date_to": "2025-03-01",
+        "include_comments": True,
+        "enrich": True,
+        "idempotency_key": "77777777-7777-7777-7777-777777777777",
     }
 
 
