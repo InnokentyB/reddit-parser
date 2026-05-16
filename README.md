@@ -226,13 +226,13 @@ The container entrypoint is:
 
 Railway config-as-code applies to a single deployment at a time, not to an entire multi-service project, so this repo includes one config file per service:
 
-- API: [railway.toml](/Users/innokentyb/Documents/Reddit%20scrapper/railway.toml:1)
+- API: [railway/api.toml](/Users/innokentyb/Documents/Reddit%20scrapper/railway/api.toml:1)
 - Worker: [railway/worker.toml](/Users/innokentyb/Documents/Reddit%20scrapper/railway/worker.toml:1)
 - Scheduler: [railway/scheduler.toml](/Users/innokentyb/Documents/Reddit%20scrapper/railway/scheduler.toml:1)
 
 In Railway, each service should point at the same repository, but use a different `Config as Code` path:
 
-- `api` service: `/railway.toml`
+- `api` service: `/railway/api.toml`
 - `worker` service: `/railway/worker.toml`
 - `scheduler` service: `/railway/scheduler.toml`
 
