@@ -66,6 +66,10 @@ def default_database_url() -> str:
     )
 
 
+def default_database_schema() -> str:
+    return os.getenv("PARSER_DB_SCHEMA", "parser").strip() or "parser"
+
+
 def default_comment_limit_per_post() -> int:
     return int(os.getenv("COMMENT_LIMIT_PER_POST", str(DEFAULT_COMMENT_LIMIT_PER_POST)))
 

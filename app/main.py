@@ -9,8 +9,8 @@ from fastapi import FastAPI, Header, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 
-from app.config import default_database_url
-from app.db import Base, create_engine_and_sessionmaker, ensure_runtime_schema
+from app.config import default_database_schema, default_database_url
+from app.db import create_engine_and_sessionmaker, initialize_database
 from app.domain.search import build_query_hash
 from app.creator_api import create_creator_app
 from app.errors import AppError, create_error_response
@@ -100,9 +100,9 @@ def create_app(testing: bool = False) -> FastAPI:
     engine, session_factory = create_engine_and_sessionmaker(
         testing=testing,
         database_url=None if testing else default_database_url(),
+        database_schema=None if testing else default_database_schema(),
     )
-    Base.metadata.create_all(engine)
-    ensure_runtime_schema(engine)
+    initialize_database(engine, None if testing else default_database_schema())
     app.state.engine = engine
     app.state.repository = Repository(session_factory)
     app.mount("/creator-api", create_creator_app(app.state.repository, testing=testing))

@@ -82,6 +82,7 @@ By default, the app now expects:
 
 ```bash
 export APP_DATABASE_URL=postgresql+psycopg2://postgres:postgres@127.0.0.1:5432/reddit_insight_collector
+export PARSER_DB_SCHEMA=parser
 ```
 
 If you want to point to Railway or another hosted Postgres later, use its connection string in `APP_DATABASE_URL` or `DATABASE_URL`.
@@ -202,6 +203,7 @@ curl -X POST 'http://127.0.0.1:8000/search-templates/<template_id>/run' \
 ## Notes
 
 - Default runtime database: local Postgres on `127.0.0.1:5432`
+- Default Postgres schema: `parser`
 - Tests use an isolated in-memory SQLite database
 - `app.worker` handles Reddit ingestion and refresh runs
 - `app.scheduler` is the clean cron-job entrypoint for daily template reruns
@@ -271,6 +273,7 @@ Required variables:
 
 ```bash
 APP_DATABASE_URL=${{Postgres.DATABASE_URL}}
+PARSER_DB_SCHEMA=parser
 REDDIT_PROVIDER=oauth
 REDDIT_CLIENT_ID=...
 REDDIT_CLIENT_SECRET=...
@@ -303,6 +306,7 @@ Required variables:
 
 ```bash
 APP_DATABASE_URL=${{Postgres.DATABASE_URL}}
+PARSER_DB_SCHEMA=parser
 REDDIT_PROVIDER=oauth
 REDDIT_CLIENT_ID=...
 REDDIT_CLIENT_SECRET=...
@@ -315,6 +319,7 @@ If you switch to browser mode instead:
 
 ```bash
 APP_DATABASE_URL=${{Postgres.DATABASE_URL}}
+PARSER_DB_SCHEMA=parser
 REDDIT_PROVIDER=browser
 REDDIT_BROWSER_HEADLESS=true
 REDDIT_BROWSER_TIMEOUT_MS=20000
@@ -340,6 +345,7 @@ Required variables:
 
 ```bash
 APP_DATABASE_URL=${{Postgres.DATABASE_URL}}
+PARSER_DB_SCHEMA=parser
 ```
 
 The default cron schedule in the checked-in config is every 6 hours:
