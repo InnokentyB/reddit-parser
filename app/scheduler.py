@@ -3,8 +3,8 @@ from __future__ import annotations
 import argparse
 import time
 
-from app.config import default_database_url
-from app.db import Base, create_engine_and_sessionmaker, ensure_runtime_schema
+from app.config import default_database_schema, default_database_url
+from app.db import create_engine_and_sessionmaker, initialize_database
 from app.repository import Repository
 
 
@@ -21,9 +21,9 @@ def main() -> int:
     engine, session_factory = create_engine_and_sessionmaker(
         testing=False,
         database_url=default_database_url(),
+        database_schema=default_database_schema(),
     )
-    Base.metadata.create_all(engine)
-    ensure_runtime_schema(engine)
+    initialize_database(engine, default_database_schema())
     repository = Repository(session_factory)
 
     if args.once:

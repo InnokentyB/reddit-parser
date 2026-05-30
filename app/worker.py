@@ -15,11 +15,12 @@ from app.config import (
     POST_PLATFORM,
     TOOLS_KEYWORDS,
     default_comment_limit_per_post,
+    default_database_schema,
     default_database_url,
     default_query_cooldown_seconds,
     default_subreddit_snapshot_ttl_days,
 )
-from app.db import Base, create_engine_and_sessionmaker, ensure_runtime_schema
+from app.db import create_engine_and_sessionmaker, initialize_database
 from app.providers.indie_hackers import IndieHackersFeedClient, IndieHackersTransientError
 from app.providers.reddit_factory import create_reddit_client_from_env
 from app.providers.reddit import RedditAuthError, RedditConfigurationError, RedditOAuthClient, RedditTransientError
@@ -177,9 +178,9 @@ def main() -> int:
     engine, session_factory = create_engine_and_sessionmaker(
         testing=False,
         database_url=default_database_url(),
+        database_schema=default_database_schema(),
     )
-    Base.metadata.create_all(engine)
-    ensure_runtime_schema(engine)
+    initialize_database(engine, default_database_schema())
     repository = Repository(session_factory)
     reddit_client = create_reddit_client_from_env()
     indie_hackers_client = IndieHackersFeedClient()
