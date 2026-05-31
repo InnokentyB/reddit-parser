@@ -4,7 +4,7 @@ from datetime import date, datetime, timezone
 from email.utils import parsedate_to_datetime
 from hashlib import sha256
 from html import unescape
-from urllib.parse import urlparse
+from urllib.parse import parse_qsl, urlencode, urlparse, urlsplit, urlunsplit
 from xml.etree import ElementTree
 import re
 
@@ -47,7 +47,7 @@ class IndieHackersFeedClient:
     ) -> list[dict]:
         del subreddit, min_score
         try:
-            response = self._client.get(self.feed_url)
+            response = self._client.get(self._search_feed_url(query))
             response.raise_for_status()
         except httpx.HTTPError as exc:
             raise IndieHackersTransientError(f"Indie Hackers feed request failed: {exc}") from exc
@@ -75,6 +75,15 @@ class IndieHackersFeedClient:
 
         items.sort(key=lambda post: (-int(post["created_utc"]), str(post["reddit_post_id"])))
         return items[:limit]
+
+    def _search_feed_url(self, query: str) -> str:
+        if not query.strip():
+            return self.feed_url
+
+        parts = urlsplit(self.feed_url)
+        params = dict(parse_qsl(parts.query, keep_blank_values=True))
+        params["q"] = query
+        return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(params), parts.fragment))
 
     def fetch_post_comments(self, reddit_post_id: str, comment_limit_per_post: int) -> list[dict]:
         del reddit_post_id, comment_limit_per_post

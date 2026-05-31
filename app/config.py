@@ -13,7 +13,10 @@ SOURCE_REDDIT = "reddit"
 SOURCE_INDIE_HACKERS = "indie_hackers"
 SUPPORTED_SOURCES = {SOURCE_REDDIT, SOURCE_INDIE_HACKERS}
 POST_PLATFORM = "reddit"
-INDIE_HACKERS_FEED_URL = "https://www.indiehackers.com/feed.rss"
+INDIE_HACKERS_FEED_URL = os.getenv(
+    "INDIE_HACKERS_FEED_URL",
+    "https://feed.indiehackers.world/posts.rss",
+)
 
 ALLOWLIST_SUBREDDITS = {
     "instructionaldesign",
