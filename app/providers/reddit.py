@@ -134,7 +134,7 @@ class RedditOAuthClient:
             "q": query,
             "limit": min(limit, 100),
             "restrict_sr": "true" if subreddit else "false",
-            "sort": "new",
+            "sort": "relevance",
             "type": "link",
         }
         payload = self._request_json("GET", path, params=params)

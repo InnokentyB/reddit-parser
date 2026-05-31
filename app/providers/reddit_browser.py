@@ -200,7 +200,7 @@ class RedditBrowserClient:
     @staticmethod
     def _search_url(query: str, subreddit: str | None) -> str:
         base = f"https://old.reddit.com/r/{subreddit}/search/" if subreddit else "https://old.reddit.com/search/"
-        params = [f"q={quote_plus(query)}", "sort=new", "t=all"]
+        params = [f"q={quote_plus(query)}", "sort=relevance", "t=all"]
         if subreddit:
             params.append("restrict_sr=on")
         return f"{base}?{'&'.join(params)}"
