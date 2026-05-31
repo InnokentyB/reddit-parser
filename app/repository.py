@@ -107,6 +107,8 @@ class Repository:
                 created_at=now,
             )
             session.add(job)
+            # Flush the parent row first so FK-constrained run inserts are ordered reliably.
+            session.flush()
             session.add(run)
             session.commit()
         return {"job_id": job_id, "run_id": run_id, "status": "queued"}
