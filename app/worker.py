@@ -223,7 +223,7 @@ def _resolve_target_subreddits(source: str, subreddit: str | None, subreddits: l
                 raise ValueError(f"Subreddit '{item}' is not in the allow-list")
         return normalized_subreddits
     if subreddit is None:
-        return sorted(ALLOWLIST_SUBREDDITS)
+        return [None]
     if subreddit not in ALLOWLIST_SUBREDDITS:
         raise ValueError(f"Subreddit '{subreddit}' is not in the allow-list")
     return [subreddit]
