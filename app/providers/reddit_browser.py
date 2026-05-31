@@ -61,6 +61,7 @@ class RedditBrowserClient:
         page = self._new_page()
         try:
             page.goto(self._search_url(query, subreddit), wait_until="domcontentloaded", timeout=self.timeout_ms)
+            self._ensure_not_blocked(page)
             items = page.locator("div.thing.link")
             count = min(items.count(), limit * 3)
             posts: list[dict[str, Any]] = []
@@ -96,6 +97,7 @@ class RedditBrowserClient:
                 wait_until="domcontentloaded",
                 timeout=self.timeout_ms,
             )
+            self._ensure_not_blocked(page)
             comments_locator = page.locator("div.thing.comment")
             count = min(comments_locator.count(), comment_limit_per_post * 3)
             comments: list[dict[str, Any]] = []
@@ -175,6 +177,25 @@ class RedditBrowserClient:
             engine = self._playwright.chromium
         self._browser = engine.launch(headless=self.headless)
         return self._browser
+
+    def _ensure_not_blocked(self, page) -> None:
+        title = (page.title() or "").strip().lower()
+        body_text = ""
+        try:
+            body_text = (page.locator("body").inner_text(timeout=2000) or "").strip().lower()
+        except Exception:
+            body_text = ""
+
+        blocked_markers = (
+            "whoa there, pardner",
+            "your request has been blocked due to a network policy",
+        )
+        if any(marker in title for marker in blocked_markers) or any(marker in body_text for marker in blocked_markers):
+            raise RedditTransientError(
+                "Reddit blocked browser-based search from the current network. "
+                "Configure valid REDDIT_CLIENT_ID, REDDIT_CLIENT_SECRET, and REDDIT_USER_AGENT "
+                "and switch to REDDIT_PROVIDER=oauth."
+            )
 
     @staticmethod
     def _search_url(query: str, subreddit: str | None) -> str:
