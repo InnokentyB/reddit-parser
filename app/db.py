@@ -58,6 +58,9 @@ def create_engine_and_sessionmaker(
         engine = create_engine(
             database_url,
             future=True,
+            connect_args={"options": f"-csearch_path={_normalize_schema_name(database_schema)},public"}
+            if _normalize_schema_name(database_schema)
+            else {},
         )
         _configure_postgres_search_path(engine, database_schema)
 
